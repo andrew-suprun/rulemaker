@@ -52,19 +52,38 @@ func TestLineTokenizer(t *testing.T) {
 	}
 }
 
-func TestTokenizer(t *testing.T) {
-	Tokenize(rules, listener())
+func TestTokenizer1(t *testing.T) {
+	Tokenize(rules, (&listener{t: t}).listener)
 }
 
-func listener() Tokens {
+type listener struct {
+	t      *testing.T
+	line   int
+	column int
+}
+
+func (l *listener) listener(token Token) {
+	fmt.Println(token)
+	if token.Line < l.line || token.Line == l.line && token.StartColumn < l.column {
+		l.t.FailNow()
+	}
+	l.line = token.Line
+	l.column = token.EndColumn
+}
+
+func TestTokenizer2(t *testing.T) {
+	Tokenize(rules, tokens(t))
+}
+
+func tokens(t *testing.T) Tokens {
 	line, column := 0, 0
-	return func(t Token) {
-		fmt.Println(t)
-		if t.Line < line || t.Line == line && t.StartColumn < column {
-			panic("FUBAR")
+	return func(token Token) {
+		fmt.Println(token)
+		if token.Line < line || token.Line == line && token.StartColumn < column {
+			t.FailNow()
 		}
-		line = t.Line
-		column = t.EndColumn
+		line = token.Line
+		column = token.EndColumn
 	}
 }
 
