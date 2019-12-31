@@ -4,23 +4,23 @@ import (
 	"bytes"
 	"fmt"
 	"strconv"
-	"strings"
 	"time"
 	"unicode"
 )
 
-func NewTokenizer(content string) Tokenizer {
-	return newTokenizer(content)
+func Tokenize(content [][]rune, tokens Tokens) {
+	tokenizer := &tokenizer{
+		content: content,
+		tokens:  tokens,
+	}
+	tokenizer.tokenize()
 }
 
-type Tokenizer interface {
-	Tokens() TokenLines
-}
+type Tokens func(token Token)
 
-type TokenLines []TokenLine
-type TokenLine []Token
 type Token struct {
 	Type        TokenType
+	Line        int
 	StartColumn int
 	EndColumn   int
 	Text        string
@@ -28,7 +28,7 @@ type Token struct {
 }
 
 func (t Token) String() string {
-	return fmt.Sprintf("<token %d-%d: %q value:%v type:%s>", t.StartColumn, t.EndColumn, t.Text, t.Value, t.Type)
+	return fmt.Sprintf("<token %d:%d-%d: %q value:%v type:%s>", t.Line, t.StartColumn, t.EndColumn, t.Text, t.Value, t.Type)
 }
 
 type TokenType int
@@ -96,153 +96,125 @@ func (t TokenType) String() string {
 	return "UnknownType"
 }
 
-func newTokenizer(content string) Tokenizer {
-	tokenizer := &tokenizer{
-		content: splitLines(content),
-	}
-	tokenizer.tokenize()
-	return tokenizer
-}
-
-func splitLines(text string) [][]rune {
-	lines := strings.Split(text, "\n")
-	result := make([][]rune, len(lines))
-	for i, line := range lines {
-		result[i] = []rune(line)
-	}
-	return result
+type tokenizer struct {
+	content     [][]rune
+	lineContent []rune
+	line        int
+	column      int
+	tokens      Tokens
 }
 
 func (t *tokenizer) tokenize() {
-	t.tokenLines = make(TokenLines, len(t.content))
-	for i, line := range t.content {
-		t.tokenLines[i] = t.tokenizeLine(line)
+	for t.line, t.lineContent = range t.content {
+		t.tokenizeLine()
 	}
 }
 
-func (t *tokenizer) tokenizeLine(line []rune) TokenLine {
-	lt := &lineTokenizer{line: line}
-	return lt.tokenize()
-}
-
-type lineTokenizer struct {
-	line   []rune
-	column int
-}
-
-func (t *lineTokenizer) tokenize() (tokens TokenLine) {
+func (t *tokenizer) tokenizeLine() {
+	t.column = 0
 	for {
 		t.skipSpace()
-		if t.column >= len(t.line) {
-			return tokens
+		if t.column >= len(t.lineContent) {
+			return
 		}
-		ch := t.line[t.column]
+		ch := t.lineContent[t.column]
 		switch ch {
 		case '#':
-			tokens = append(tokens, t.comment())
+			t.comment()
 		case '"':
-			tokens = append(tokens, t.stringLiteral())
+			t.stringLiteral()
 		case '(':
-			tokens = append(tokens, t.openParen())
+			t.openParen()
 		case ')':
-			tokens = append(tokens, t.closeParen())
+			t.closeParen()
 		default:
-			startColumn := t.column
-			t.skipToSeparator()
-			tokenText := t.line[startColumn:t.column]
-			tokenType, tokenValue := tokenTypeAndValue(tokenText)
-			token := Token{
-				Type:        tokenType,
-				StartColumn: startColumn,
-				EndColumn:   t.column,
-				Text:        string(tokenText),
-				Value:       tokenValue,
-			}
-			tokens = append(tokens, token)
+			t.regularToken()
 		}
 	}
 }
 
-func tokenTypeAndValue(tokenText []rune) (TokenType, interface{}) {
+func (t *tokenizer) regularToken() {
+	startColumn := t.column
+	t.skipToSeparator()
+	tokenText := t.lineContent[startColumn:t.column]
 	token := string(tokenText)
 	firstRune := tokenText[0]
 	lastRune := tokenText[len(tokenText)-1]
 	if lastRune == ':' {
-		return Label, token
+		t.token(Label, startColumn, token)
+		return
 	}
 	if lastRune == 'y' || lastRune == 'm' || lastRune == 'd' {
 		intValue, err := strconv.ParseInt(string(tokenText[:len(tokenText)-1]), 10, 64)
 		if err == nil {
 			switch lastRune {
 			case 'y':
-				return YearSpanLiteral, int(intValue)
+				t.token(YearSpanLiteral, startColumn, int(intValue))
 			case 'm':
-				return MonthSpanLiteral, int(intValue)
+				t.token(MonthSpanLiteral, startColumn, int(intValue))
 			case 'd':
-				return DaySpanLiteral, int(intValue)
+				t.token(DaySpanLiteral, startColumn, int(intValue))
 			}
+			return
 		}
 	}
 	intValue, err := strconv.ParseInt(string(tokenText), 10, 64)
 	if err == nil {
-		return IntegerLiteral, int(intValue)
+		t.token(IntegerLiteral, startColumn, int(intValue))
+		return
 	}
 
 	floatValue, err := strconv.ParseFloat(string(tokenText), 64)
 	if err == nil {
-		return FloatingPointLiteral, floatValue
+		t.token(FloatingPointLiteral, startColumn, floatValue)
+		return
 	}
 
 	switch firstRune {
 	case '@':
 		date, err := time.Parse("2006-01-02", string(tokenText[1:]))
-		if err != nil {
-			return InvalidToken, nil
+		if err == nil {
+			t.token(DateLiteral, startColumn, date)
+		} else {
+			t.token(InvalidToken, startColumn, nil)
 		}
-		return DateLiteral, date
+		return
 	case '_':
-		return Variable, string(tokenText)
+		t.token(Variable, startColumn, string(tokenText))
+		return
 	case '$':
-		return Input, string(tokenText[1:])
+		t.token(Input, startColumn, string(tokenText[1:]))
+		return
 	}
 	switch token {
 	case "true":
-		return BooleanLiteral, true
+		t.token(BooleanLiteral, startColumn, true)
 	case "false":
-		return BooleanLiteral, false
+		t.token(BooleanLiteral, startColumn, false)
 	case "nil":
-		return NilLiteral, nil
+		t.token(NilLiteral, startColumn, nil)
 	case "today":
-		return TodayLiteral, nil
+		t.token(TodayLiteral, startColumn, nil)
+	default:
+		t.token(Identifier, startColumn, token)
 	}
-
-	return Identifier, token
 }
 
-func (t *tokenizer) Tokens() TokenLines {
-	return t.tokenLines
-}
-
-type tokenizer struct {
-	content    [][]rune
-	tokenLines TokenLines
-}
-
-func (t *lineTokenizer) comment() Token {
+func (t *tokenizer) comment() {
 	startColumn := t.column
-	t.column = len(t.line)
-	return t.token(Comment, startColumn, nil)
+	t.column = len(t.lineContent)
+	t.token(Comment, startColumn, nil)
 }
 
-func (t *lineTokenizer) stringLiteral() Token {
+func (t *tokenizer) stringLiteral() {
 	startColumn := t.column
 	t.column++
 	escape := false
 	closed := false
 	buf := bytes.Buffer{}
 loop:
-	for ; t.column < len(t.line); t.column++ {
-		ch := t.line[t.column]
+	for ; t.column < len(t.lineContent); t.column++ {
+		ch := t.lineContent[t.column]
 		switch ch {
 		case '\n':
 			escape = true
@@ -264,42 +236,44 @@ loop:
 	}
 
 	if escape || !closed {
-		return t.token(InvalidToken, startColumn, nil)
+		t.token(InvalidToken, startColumn, nil)
+		return
 	}
 
-	return t.token(StringLiteral, startColumn, buf.String())
+	t.token(StringLiteral, startColumn, buf.String())
 }
 
-func (t *lineTokenizer) openParen() Token {
+func (t *tokenizer) openParen() {
 	startColumn := t.column
 	t.column++
-	return t.token(OpenParen, startColumn, nil)
+	t.token(OpenParen, startColumn, nil)
 }
 
-func (t *lineTokenizer) closeParen() Token {
+func (t *tokenizer) closeParen() {
 	startColumn := t.column
 	t.column++
-	return t.token(CloseParen, startColumn, nil)
+	t.token(CloseParen, startColumn, nil)
 }
 
-func (t *lineTokenizer) token(tokenType TokenType, startColumn int, value interface{}) (token Token) {
-	return Token{
+func (t *tokenizer) token(tokenType TokenType, startColumn int, value interface{}) {
+	t.tokens(Token{
 		Type:        tokenType,
+		Line:        t.line,
 		StartColumn: startColumn,
 		EndColumn:   t.column,
-		Text:        string(t.line[startColumn:t.column]),
+		Text:        string(t.lineContent[startColumn:t.column]),
 		Value:       value,
+	})
+}
+
+func (t *tokenizer) skipSpace() {
+	for ; t.column < len(t.lineContent) && unicode.IsSpace(t.lineContent[t.column]); t.column++ {
 	}
 }
 
-func (t *lineTokenizer) skipSpace() {
-	for ; t.column < len(t.line) && unicode.IsSpace(t.line[t.column]); t.column++ {
-	}
-}
-
-func (t *lineTokenizer) skipToSeparator() {
-	for ; t.column < len(t.line); t.column++ {
-		ch := t.line[t.column]
+func (t *tokenizer) skipToSeparator() {
+	for ; t.column < len(t.lineContent); t.column++ {
+		ch := t.lineContent[t.column]
 		if ch == '(' || ch == ')' || unicode.IsSpace(ch) {
 			return
 		}

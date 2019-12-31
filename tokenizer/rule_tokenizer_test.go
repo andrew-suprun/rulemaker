@@ -4,42 +4,45 @@ import (
 	"fmt"
 	"log"
 	"reflect"
+	"strings"
 	"testing"
 	"time"
 )
 
 var fixture = []struct {
 	line   string
-	tokens TokenLine
+	tokens []Token
 }{
-	{`"abc"`, TokenLine{{StringLiteral, 0, 5, `"abc"`, `abc`}}},
-	{`"abc`, TokenLine{{InvalidToken, 0, 4, `"abc`, nil}}},
-	{`  "\""`, TokenLine{{StringLiteral, 2, 6, `"\""`, `"`}}},
-	{`"\`, TokenLine{{InvalidToken, 0, 2, `"\`, nil}}},
-	{`""`, TokenLine{{StringLiteral, 0, 2, `""`, ""}}},
-	{`   # abc   `, TokenLine{{Comment, 3, 11, `# abc   `, nil}}},
-	{` (())`, TokenLine{{OpenParen, 1, 2, `(`, nil}, {OpenParen, 2, 3, `(`, nil}, {CloseParen, 3, 4, `)`, nil}, {CloseParen, 4, 5, `)`, nil}}},
-	{` @2020-01-02 `, TokenLine{{DateLiteral, 1, 12, `@2020-01-02`, time.Date(2020, 1, 2, 0, 0, 0, 0, time.UTC)}}},
-	{`@2020-01-02`, TokenLine{{DateLiteral, 0, 11, `@2020-01-02`, time.Date(2020, 1, 2, 0, 0, 0, 0, time.UTC)}}},
-	{`@2020-01-0 `, TokenLine{{InvalidToken, 0, 10, `@2020-01-0`, nil}}},
-	{`_`, TokenLine{{Variable, 0, 1, `_`, `_`}}},
-	{`  _abc_123_ `, TokenLine{{Variable, 2, 11, `_abc_123_`, `_abc_123_`}}},
-	{`abc`, TokenLine{{Identifier, 0, 3, `abc`, `abc`}}},
-	{` abc.+.-.123 `, TokenLine{{Identifier, 1, 12, `abc.+.-.123`, `abc.+.-.123`}}},
-	{` today `, TokenLine{{TodayLiteral, 1, 6, `today`, nil}}},
-	{`nil`, TokenLine{{NilLiteral, 0, 3, `nil`, nil}}},
-	{`true`, TokenLine{{BooleanLiteral, 0, 4, `true`, true}}},
-	{`false`, TokenLine{{BooleanLiteral, 0, 5, `false`, false}}},
-	{`  -00123  `, TokenLine{{IntegerLiteral, 2, 8, `-00123`, -123}}},
-	{`  -00123.  `, TokenLine{{FloatingPointLiteral, 2, 9, `-00123.`, -123.0}}},
-	{`1y 2m 3d`, TokenLine{{YearSpanLiteral, 0, 2, `1y`, 1}, {MonthSpanLiteral, 3, 5, `2m`, 2}, {DaySpanLiteral, 6, 8, `3d`, 3}}},
-	{`123 abc`, TokenLine{{IntegerLiteral, 0, 3, `123`, 123}, {Identifier, 4, 7, `abc`, `abc`}}},
+	{`"abc"`, []Token{{StringLiteral, 0, 0, 5, `"abc"`, `abc`}}},
+	{`"abc`, []Token{{InvalidToken, 0, 0, 4, `"abc`, nil}}},
+	{`  "\""`, []Token{{StringLiteral, 0, 2, 6, `"\""`, `"`}}},
+	{`"\`, []Token{{InvalidToken, 0, 0, 2, `"\`, nil}}},
+	{`""`, []Token{{StringLiteral, 0, 0, 2, `""`, ""}}},
+	{`   # abc   `, []Token{{Comment, 0, 3, 11, `# abc   `, nil}}},
+	{` (())`, []Token{{OpenParen, 0, 1, 2, `(`, nil}, {OpenParen, 0, 2, 3, `(`, nil}, {CloseParen, 0, 3, 4, `)`, nil}, {CloseParen, 0, 4, 5, `)`, nil}}},
+	{` @2020-01-02 `, []Token{{DateLiteral, 0, 1, 12, `@2020-01-02`, time.Date(2020, 1, 2, 0, 0, 0, 0, time.UTC)}}},
+	{`@2020-01-02`, []Token{{DateLiteral, 0, 0, 11, `@2020-01-02`, time.Date(2020, 1, 2, 0, 0, 0, 0, time.UTC)}}},
+	{`@2020-01-0 `, []Token{{InvalidToken, 0, 0, 10, `@2020-01-0`, nil}}},
+	{`_`, []Token{{Variable, 0, 0, 1, `_`, `_`}}},
+	{`  _abc_123_ `, []Token{{Variable, 0, 2, 11, `_abc_123_`, `_abc_123_`}}},
+	{`abc`, []Token{{Identifier, 0, 0, 3, `abc`, `abc`}}},
+	{` abc.+.-.123 `, []Token{{Identifier, 0, 1, 12, `abc.+.-.123`, `abc.+.-.123`}}},
+	{` today `, []Token{{TodayLiteral, 0, 1, 6, `today`, nil}}},
+	{`nil`, []Token{{NilLiteral, 0, 0, 3, `nil`, nil}}},
+	{`true`, []Token{{BooleanLiteral, 0, 0, 4, `true`, true}}},
+	{`false`, []Token{{BooleanLiteral, 0, 0, 5, `false`, false}}},
+	{`  -00123  `, []Token{{IntegerLiteral, 0, 2, 8, `-00123`, -123}}},
+	{`  -00123.  `, []Token{{FloatingPointLiteral, 0, 2, 9, `-00123.`, -123.0}}},
+	{`1y 2m 3d`, []Token{{YearSpanLiteral, 0, 0, 2, `1y`, 1}, {MonthSpanLiteral, 0, 3, 5, `2m`, 2}, {DaySpanLiteral, 0, 6, 8, `3d`, 3}}},
+	{`123 abc`, []Token{{IntegerLiteral, 0, 0, 3, `123`, 123}, {Identifier, 0, 4, 7, `abc`, `abc`}}},
 }
 
 func TestLineTokenizer(t *testing.T) {
 	for _, f := range fixture {
-		lt := &lineTokenizer{line: []rune(f.line)}
-		tokens := lt.tokenize()
+		var tokens []Token
+		Tokenize([][]rune{[]rune(f.line)}, func(token Token) {
+			tokens = append(tokens, token)
+		})
 		if !reflect.DeepEqual(tokens, f.tokens) {
 			log.Println("line    ", f.line)
 			log.Println("got     ", tokens)
@@ -50,7 +53,31 @@ func TestLineTokenizer(t *testing.T) {
 }
 
 func TestTokenizer(t *testing.T) {
-	tokenizer := NewTokenizer(`
+	Tokenize(rules, listener())
+}
+
+func listener() Tokens {
+	line, column := 0, 0
+	return func(t Token) {
+		fmt.Println(t)
+		if t.Line < line || t.Line == line && t.StartColumn < column {
+			panic("FUBAR")
+		}
+		line = t.Line
+		column = t.EndColumn
+	}
+}
+
+func splitLines(text string) [][]rune {
+	lines := strings.Split(text, "\n")
+	result := make([][]rune, len(lines))
+	for i, line := range lines {
+		result[i] = []rune(line)
+	}
+	return result
+}
+
+var rules = splitLines(`
 _policy (map $policy
 		from: "59450" to: "170150"
 		from: "59470" to: "170170"
@@ -268,10 +295,3 @@ custom_fields.life_policy_id $policy
 # revision_reason
 # created_by
 `)
-	for _, line := range tokenizer.Tokens() {
-		fmt.Println("===")
-		for _, token := range line {
-			fmt.Println("  ", token)
-		}
-	}
-}
