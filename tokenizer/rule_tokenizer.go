@@ -16,7 +16,10 @@ func Tokenize(content [][]rune, tokens Tokens) {
 	tokenizer.tokenize()
 }
 
-type Tokens func(token Token)
+type Tokens interface {
+	Token(token Token)
+	Done()
+}
 
 type Token struct {
 	Type        TokenType
@@ -35,8 +38,9 @@ type TokenType int
 
 const (
 	InvalidToken TokenType = iota
-	Identifier
+	CanonicalField
 	Variable
+	Function
 	Input
 	Label
 	StringLiteral
@@ -49,6 +53,8 @@ const (
 	MonthSpanLiteral
 	YearSpanLiteral
 	TodayLiteral
+	EqualSign
+	Semicolon
 	OpenParen
 	CloseParen
 	Comment
@@ -58,10 +64,12 @@ func (t TokenType) String() string {
 	switch t {
 	case InvalidToken:
 		return "InvalidToken"
-	case Identifier:
-		return "Identifier"
+	case CanonicalField:
+		return "CanonicalField"
 	case Variable:
 		return "Variable"
+	case Function:
+		return "Function"
 	case Input:
 		return "Input"
 	case Label:
@@ -86,6 +94,10 @@ func (t TokenType) String() string {
 		return "YearSpanLiteral"
 	case TodayLiteral:
 		return "TodayLiteral"
+	case EqualSign:
+		return "EqualSign"
+	case Semicolon:
+		return "Semicolon"
 	case OpenParen:
 		return "OpenParen"
 	case CloseParen:
@@ -102,12 +114,14 @@ type tokenizer struct {
 	line        int
 	column      int
 	tokens      Tokens
+	issuedToken Token
 }
 
 func (t *tokenizer) tokenize() {
 	for t.line, t.lineContent = range t.content {
 		t.tokenizeLine()
 	}
+	t.tokens.Done()
 }
 
 func (t *tokenizer) tokenizeLine() {
@@ -123,6 +137,10 @@ func (t *tokenizer) tokenizeLine() {
 			t.comment()
 		case '"':
 			t.stringLiteral()
+		case '=':
+			t.equalSign()
+		case ';':
+			t.semicolon()
 		case '(':
 			t.openParen()
 		case ')':
@@ -196,7 +214,11 @@ func (t *tokenizer) regularToken() {
 	case "today":
 		t.token(TodayLiteral, startColumn, nil)
 	default:
-		t.token(Identifier, startColumn, token)
+		if t.issuedToken.Type == OpenParen {
+			t.token(Function, startColumn, token)
+		} else {
+			t.token(CanonicalField, startColumn, token)
+		}
 	}
 }
 
@@ -243,6 +265,18 @@ loop:
 	t.token(StringLiteral, startColumn, buf.String())
 }
 
+func (t *tokenizer) equalSign() {
+	startColumn := t.column
+	t.column++
+	t.token(EqualSign, startColumn, nil)
+}
+
+func (t *tokenizer) semicolon() {
+	startColumn := t.column
+	t.column++
+	t.token(Semicolon, startColumn, nil)
+}
+
 func (t *tokenizer) openParen() {
 	startColumn := t.column
 	t.column++
@@ -256,14 +290,15 @@ func (t *tokenizer) closeParen() {
 }
 
 func (t *tokenizer) token(tokenType TokenType, startColumn int, value interface{}) {
-	t.tokens(Token{
+	t.issuedToken = Token{
 		Type:        tokenType,
 		Line:        t.line,
 		StartColumn: startColumn,
 		EndColumn:   t.column,
 		Text:        string(t.lineContent[startColumn:t.column]),
 		Value:       value,
-	})
+	}
+	t.tokens.Token(t.issuedToken)
 }
 
 func (t *tokenizer) skipSpace() {
@@ -274,7 +309,7 @@ func (t *tokenizer) skipSpace() {
 func (t *tokenizer) skipToSeparator() {
 	for ; t.column < len(t.lineContent); t.column++ {
 		ch := t.lineContent[t.column]
-		if ch == '(' || ch == ')' || unicode.IsSpace(ch) {
+		if ch == '=' || ch == '(' || ch == ')' || ch == ';' || unicode.IsSpace(ch) {
 			return
 		}
 	}
