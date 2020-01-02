@@ -116,7 +116,7 @@ func main() {
 	s.EnableMouse()
 	s.Clear()
 
-	w := window{screen: s, content: string(content), metainfo: metainfo, inputs: inputs, operations: operations}
+	w := window{screen: s, content: splitLines(string(content)), metainfo: metainfo, inputs: inputs, operations: operations}
 
 	for {
 		w.draw()
@@ -133,17 +133,13 @@ func main() {
 			} else if ev.Key() == tcell.KeyCtrlQ {
 				s.Fini()
 				os.Exit(0)
-			} else {
-				if ev.Rune() == 'C' || ev.Rune() == 'c' {
-					s.SetContent(0, 0, ' ', nil, defStyle)
-				}
 			}
 		case *tcell.EventMouse:
 			button := ev.Buttons()
 			if button&tcell.WheelUp != 0 && lineOffset > 0 {
 				lineOffset--
 			}
-			if button&tcell.WheelDown != 0 {
+			if button&tcell.WheelDown != 0 && lineOffset < len(w.content)-2 {
 				lineOffset++
 			}
 		}
@@ -154,7 +150,7 @@ type window struct {
 	screen     tcell.Screen
 	title      string
 	status     string
-	content    string
+	content    [][]rune
 	metainfo   meta.Meta
 	inputs     parser.Set
 	operations parser.Set
@@ -163,14 +159,20 @@ type window struct {
 var lineOffset = 0
 
 var mainStyle = tcell.StyleDefault.Background(colorDeepBlue).Foreground(tcell.ColorWhite)
+var lineNumberStyle = mainStyle.Foreground(tcell.ColorSilver).Background(tcell.ColorBlack)
 
 func (w *window) draw() {
 	width, height := w.screen.Size()
-	var vSplit = 64
+	var vSplit = 48 // TODO: make it width - 50
 
 	for row := 2; row < height-1; row++ {
-		for col := 0; col < width; col++ {
+		for col := 5; col < width; col++ {
 			w.screen.SetContent(col, row, ' ', nil, mainStyle)
+		}
+	}
+	for row := 2; row < height-1; row++ {
+		for col := 0; col < 5; col++ {
+			w.screen.SetContent(col, row, ' ', nil, lineNumberStyle)
 		}
 	}
 
@@ -191,23 +193,80 @@ func (w *window) draw() {
 	emitStr(w.screen, 1, 1, menuStyle, "(Ctrl-Q) Quit")
 	emitStr(w.screen, 1, height-1, menuStyle, fmt.Sprintf("emp.rules:%d", lineOffset+1))
 
-	t := newTee(
-		&tokens{w: w, vSplit: vSplit, height: height},
-		&errors{w: w, vSplit: vSplit, height: height},
+	tokenizer.Tokenize(w.content,
+		parser.NewParser(w.metainfo, w.inputs, w.operations,
+			newTee(
+				// &errors{w: w, vSplit: vSplit, height: height}, // TODO: move right
+				NewWrapper(5, vSplit,
+					&tokens{w: w, vSplit: vSplit, height: height},
+				),
+			),
+		),
 	)
 
-	parser.Parse(splitLines(w.content), w.metainfo, w.inputs, w.operations, t)
-
 	w.screen.Show()
+}
+
+type PositionedTokens interface {
+	Token(token PositionedToken)
+	Done()
+}
+
+type PositionedToken struct {
+	parser.ParsedToken
+	X, Y int
+}
+
+func (t PositionedToken) String() string {
+	return fmt.Sprintf("<positioned token: %s; position: %d:%d>", t.Token, t.Y, t.X)
+}
+
+type wrapper struct {
+	lMargin, rMargin     int
+	tokens               PositionedTokens
+	lineOffset           int
+	lastX, lastY         int
+	lastColumn, lastLine int
+}
+
+func NewWrapper(lMargin, rMargin int, tokens PositionedTokens) parser.Tokens {
+	return &wrapper{lMargin: lMargin, rMargin: rMargin, tokens: tokens}
+}
+
+func (w *wrapper) Token(token parser.ParsedToken) {
+	outToken := PositionedToken{
+		ParsedToken: token,
+		X:           token.StartColumn - w.lastColumn + w.lastX,
+		Y:           token.Line - w.lastLine + w.lastY, //+ w.lineOffset,
+	}
+	if outToken.X+len(token.Text) > w.rMargin {
+		outToken.X = w.lMargin + 4
+		outToken.Y++
+		// w.lineOffset++
+	}
+	if w.lastLine != token.Line {
+		outToken.X = w.lMargin + token.StartColumn
+	}
+	// log.Printf("### wrapper: outToken.X=%d  len(token.Text)=%d  w.rMargin=%d", outToken.X, len(token.Text), w.rMargin)
+	w.lastX = outToken.X
+	w.lastY = outToken.Y
+	w.lastColumn = token.StartColumn
+	w.lastLine = token.Line
+	w.tokens.Token(outToken)
+}
+
+func (w *wrapper) Done() {
+	w.tokens.Done()
 }
 
 type tokens struct {
 	w              *window
 	vSplit, height int
+	shownLines     int
 }
 
-func (t *tokens) Token(token parser.ParsedToken) {
-	if token.Line < lineOffset || token.Line >= lineOffset+t.height-3 {
+func (t *tokens) Token(token PositionedToken) {
+	if token.Y < lineOffset || token.Y >= lineOffset+t.height-3 {
 		return
 	}
 	tokenStyle := mainStyle
@@ -244,10 +303,20 @@ func (t *tokens) Token(token parser.ParsedToken) {
 	if token.Diagnostic != "" {
 		tokenStyle = tokenStyle.Foreground(tcell.ColorRed).Bold(true).Bold(true)
 	}
-	emitStr(t.w.screen, t.vSplit+token.StartColumn+1, token.Line+2-lineOffset, tokenStyle, token.Text)
+	for ; t.shownLines <= token.Y; t.shownLines++ {
+		if t.shownLines < lineOffset {
+			continue
+		}
+		emitStr(t.w.screen, 0, t.shownLines+2-lineOffset, lineNumberStyle, fmt.Sprintf("%4d ", t.shownLines+1))
+	}
+
+	emitStr(t.w.screen, token.X, token.Y+2-lineOffset, tokenStyle, token.Text)
 }
 
 func (t *tokens) Done() {
+	// for line := lineOffset; line < lineOffset+t.height-3; line++ {
+	// 	emitStr(t.w.screen, 0, line+2-lineOffset, style, fmt.Sprintf("%4d ", line+1))
+	// }
 }
 
 type errors struct {
@@ -258,13 +327,29 @@ type errors struct {
 func (t *errors) Token(token parser.ParsedToken) {
 	if token.Diagnostic != "" {
 		message := fmt.Sprintf("%d:%d %s", token.Line+1, token.StartColumn+1, token.Diagnostic)
-		emitStr(t.w.screen, 1, t.reportLine+2, mainStyle, message)
-		t.reportLine++
+		lines := wrapLines(message, t.vSplit)
+		for _, line := range lines {
+			emitStr(t.w.screen, 1, t.reportLine+2, mainStyle, line)
+			t.reportLine++
+		}
 	}
 }
 
 func (t *errors) Done() {
 
+}
+
+func wrapLines(str string, w int) (result []string) {
+	if len(str) > w {
+		result = append(result, str[:w])
+		str = str[w:]
+	}
+	for len(str) > w-4 {
+		result = append(result, "    "+str[:w-4])
+		str = str[w-4:]
+	}
+	result = append(result, "    "+str)
+	return result
 }
 
 func (w *window) showPalette() {

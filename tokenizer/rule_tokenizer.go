@@ -1,5 +1,7 @@
 package tokenizer
 
+// TODO: remove redundant EndColumn and rename StartColumn to Column
+
 import (
 	"bytes"
 	"fmt"

@@ -27,11 +27,7 @@ func (t ParsedToken) String() string {
 
 type Set map[string]struct{}
 
-func Parse(content [][]rune, metainfo meta.Meta, inputs, operations Set, tokens Tokens) {
-	tokenizer.Tokenize(content, newParser(metainfo, inputs, operations, tokens))
-}
-
-func newParser(metainfo meta.Meta, inputs, operations Set, tokens Tokens) *parser {
+func NewParser(metainfo meta.Meta, inputs, operations Set, tokens Tokens) tokenizer.Tokens {
 	return &parser{
 		metainfo:   metainfo,
 		inputs:     inputs,
@@ -96,7 +92,7 @@ func (p *parser) headerToken(token ParsedToken) {
 		token.Diagnostic = "Rule header and body must be separated with '='"
 	}
 	if previousHeader, alreadyDefined := p.headers[token.Text]; alreadyDefined {
-		token.Diagnostic = fmt.Sprintf("Redefinition of %q; previously defined at %d:%d",
+		token.Diagnostic = fmt.Sprintf("Redefinition of %q previously defined at %d:%d",
 			token.Text, previousHeader.Line+1, previousHeader.StartColumn+1)
 	}
 	if token.Type == tokenizer.CanonicalField {
