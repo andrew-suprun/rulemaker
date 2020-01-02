@@ -12,8 +12,12 @@ import (
 
 func TestParser(t *testing.T) {
 	for i, params := range fixture {
-		lsnr := &listener{t: t, fixture: i, rules: params.rules, expected: params.tokens, debug: false}
-		Parse(splitLines(params.rules), nil, nil, lsnr)
+		lsnr := &listener{t: t, fixture: i, rules: params.rules, expected: params.tokens}
+		lsnr.debug = true
+		Parse(splitLines(params.rules),
+			Set{"foo": {}, "bar": {}},
+			Set{"x": {}, "y": {}},
+			Set{"baz": {}, "quux": {}}, lsnr)
 	}
 }
 
@@ -62,6 +66,13 @@ func (l *listener) Done() {
 			l.t.FailNow()
 		}
 	}
+	if len(l.got) > len(l.expected) {
+		log.Println("fixture  ", l.fixture)
+		log.Println("rules    ", l.rules)
+		log.Println("expected nothing")
+		log.Println("got      ", l.got[len(l.expected)])
+		l.t.FailNow()
+	}
 }
 
 func value(v interface{}) string {
@@ -92,10 +103,22 @@ var fixture = []struct {
 		{Token: tokenizer.Token{tokenizer.Comment, 0, 0, 9, `# comment`, nil}},
 	}},
 	{"abc = 1;", []ParsedToken{
-		{Token: tokenizer.Token{tokenizer.CanonicalField, 0, 0, 3, "abc", "abc"}},
+		{Token: tokenizer.Token{tokenizer.CanonicalField, 0, 0, 3, "abc", "abc"}, Diagnostic: "Canonical model does not have field \"abc\""},
 		{Token: tokenizer.Token{tokenizer.EqualSign, 0, 4, 5, "=", nil}},
 		{Token: tokenizer.Token{tokenizer.IntegerLiteral, 0, 6, 7, "1", 1}},
 		{Token: tokenizer.Token{tokenizer.Semicolon, 0, 7, 8, ";", nil}},
+	}},
+	{"foo = 1;# comment", []ParsedToken{
+		{Token: tokenizer.Token{tokenizer.CanonicalField, 0, 0, 3, "foo", "foo"}},
+		{Token: tokenizer.Token{tokenizer.EqualSign, 0, 4, 5, "=", nil}},
+		{Token: tokenizer.Token{tokenizer.IntegerLiteral, 0, 6, 7, "1", 1}},
+		{Token: tokenizer.Token{tokenizer.Semicolon, 0, 7, 8, ";", nil}},
+		{Token: tokenizer.Token{tokenizer.Comment, 0, 8, 17, "# comment", nil}},
+	}},
+	{"foo = 1", []ParsedToken{
+		{Token: tokenizer.Token{tokenizer.CanonicalField, 0, 0, 3, "foo", "foo"}},
+		{Token: tokenizer.Token{tokenizer.EqualSign, 0, 4, 5, "=", nil}},
+		{Token: tokenizer.Token{tokenizer.IntegerLiteral, 0, 6, 7, "1", 1}},
 	}},
 	{"foo=1;foo=2;", []ParsedToken{
 		{Token: tokenizer.Token{tokenizer.CanonicalField, 0, 0, 3, "foo", "foo"}},
@@ -107,9 +130,63 @@ var fixture = []struct {
 		{Token: tokenizer.Token{tokenizer.IntegerLiteral, 0, 10, 11, "2", 2}},
 		{Token: tokenizer.Token{tokenizer.Semicolon, 0, 11, 12, ";", nil}},
 	}},
-	// TODO: validate fields/inputs/functions
-	// TODO: incomplete last rule
-	// TODO: comments after last rule
-	// TODO: multiple equal signs
-	// TODO: multiple semicolons
+	{"foo=(baz 123);", []ParsedToken{
+		{Token: tokenizer.Token{tokenizer.CanonicalField, 0, 0, 3, "foo", "foo"}},
+		{Token: tokenizer.Token{tokenizer.EqualSign, 0, 3, 4, "=", nil}},
+		{Token: tokenizer.Token{tokenizer.OpenParen, 0, 4, 5, "(", nil}},
+		{Token: tokenizer.Token{tokenizer.Function, 0, 5, 8, "baz", "baz"}},
+		{Token: tokenizer.Token{tokenizer.IntegerLiteral, 0, 9, 12, "123", 123}},
+		{Token: tokenizer.Token{tokenizer.CloseParen, 0, 12, 13, ")", nil}},
+		{Token: tokenizer.Token{tokenizer.Semicolon, 0, 13, 14, ";", nil}},
+	}},
+	{"foo=(unknown 123);", []ParsedToken{
+		{Token: tokenizer.Token{tokenizer.CanonicalField, 0, 0, 3, "foo", "foo"}},
+		{Token: tokenizer.Token{tokenizer.EqualSign, 0, 3, 4, "=", nil}},
+		{Token: tokenizer.Token{tokenizer.OpenParen, 0, 4, 5, "(", nil}},
+		{Token: tokenizer.Token{tokenizer.Function, 0, 5, 12, "unknown", "unknown"}, Diagnostic: "Operation \"unknown\" is not defined"},
+		{Token: tokenizer.Token{tokenizer.IntegerLiteral, 0, 13, 16, "123", 123}},
+		{Token: tokenizer.Token{tokenizer.CloseParen, 0, 16, 17, ")", nil}},
+		{Token: tokenizer.Token{tokenizer.Semicolon, 0, 17, 18, ";", nil}},
+	}},
+	{"foo = = 1y;", []ParsedToken{
+		{Token: tokenizer.Token{tokenizer.CanonicalField, 0, 0, 3, "foo", "foo"}},
+		{Token: tokenizer.Token{tokenizer.EqualSign, 0, 4, 5, "=", nil}},
+		{Token: tokenizer.Token{tokenizer.EqualSign, 0, 6, 7, "=", nil}, Diagnostic: "Extra '='"},
+		{Token: tokenizer.Token{tokenizer.YearSpanLiteral, 0, 8, 10, "1y", 1}},
+		{Token: tokenizer.Token{tokenizer.Semicolon, 0, 10, 11, ";", nil}},
+	}},
+	{"foo = 1m;;;", []ParsedToken{
+		{Token: tokenizer.Token{tokenizer.CanonicalField, 0, 0, 3, "foo", "foo"}},
+		{Token: tokenizer.Token{tokenizer.EqualSign, 0, 4, 5, "=", nil}},
+		{Token: tokenizer.Token{tokenizer.MonthSpanLiteral, 0, 6, 8, "1m", 1}},
+		{Token: tokenizer.Token{tokenizer.Semicolon, 0, 8, 9, ";", nil}},
+		{Token: tokenizer.Token{tokenizer.Semicolon, 0, 9, 10, ";", nil}},
+		{Token: tokenizer.Token{tokenizer.Semicolon, 0, 10, 11, ";", nil}},
+	}},
+	{"bar=foo;", []ParsedToken{
+		{Token: tokenizer.Token{tokenizer.CanonicalField, 0, 0, 3, "bar", "bar"}},
+		{Token: tokenizer.Token{tokenizer.EqualSign, 0, 3, 4, "=", nil}},
+		{Token: tokenizer.Token{tokenizer.CanonicalField, 0, 4, 7, "foo", "foo"}, Diagnostic: "Field \"foo\" is not defined"},
+		{Token: tokenizer.Token{tokenizer.Semicolon, 0, 7, 8, ";", nil}},
+	}},
+	{"foo = 1m;bar=foo;", []ParsedToken{
+		{Token: tokenizer.Token{tokenizer.CanonicalField, 0, 0, 3, "foo", "foo"}},
+		{Token: tokenizer.Token{tokenizer.EqualSign, 0, 4, 5, "=", nil}},
+		{Token: tokenizer.Token{tokenizer.MonthSpanLiteral, 0, 6, 8, "1m", 1}},
+		{Token: tokenizer.Token{tokenizer.Semicolon, 0, 8, 9, ";", nil}},
+		{Token: tokenizer.Token{tokenizer.CanonicalField, 0, 9, 12, "bar", "bar"}},
+		{Token: tokenizer.Token{tokenizer.EqualSign, 0, 12, 13, "=", nil}},
+		{Token: tokenizer.Token{tokenizer.CanonicalField, 0, 13, 16, "foo", "foo"}},
+		{Token: tokenizer.Token{tokenizer.Semicolon, 0, 16, 17, ";", nil}},
+	}},
+	{"foo = $x; bar = $a;", []ParsedToken{
+		{Token: tokenizer.Token{tokenizer.CanonicalField, 0, 0, 3, "foo", "foo"}},
+		{Token: tokenizer.Token{tokenizer.EqualSign, 0, 4, 5, "=", nil}},
+		{Token: tokenizer.Token{tokenizer.Input, 0, 6, 8, "$x", "x"}},
+		{Token: tokenizer.Token{tokenizer.Semicolon, 0, 8, 9, ";", nil}},
+		{Token: tokenizer.Token{tokenizer.CanonicalField, 0, 10, 13, "bar", "bar"}},
+		{Token: tokenizer.Token{tokenizer.EqualSign, 0, 14, 15, "=", nil}},
+		{Token: tokenizer.Token{tokenizer.Input, 0, 16, 18, "$a", "a"}, Diagnostic: "Input \"$a\" is not defined"},
+		{Token: tokenizer.Token{tokenizer.Semicolon, 0, 18, 19, ";", nil}},
+	}},
 }

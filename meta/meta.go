@@ -2,12 +2,13 @@ package meta
 
 import (
 	"fmt"
-	"model"
 	"reflect"
 	"strconv"
 	"strings"
 	"time"
-	"util"
+
+	"league.com/rulemaker/model"
+	"league.com/rulemaker/util"
 )
 
 type Type int

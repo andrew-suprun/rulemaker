@@ -2,7 +2,9 @@ package parser
 
 import (
 	"fmt"
+	"strings"
 
+	"league.com/rulemaker/meta"
 	"league.com/rulemaker/tokenizer"
 )
 
@@ -25,13 +27,14 @@ func (t ParsedToken) String() string {
 
 type Set map[string]struct{}
 
-func Parse(content [][]rune, fields, operations Set, tokens Tokens) {
-	tokenizer.Tokenize(content, newParser(fields, operations, tokens))
+func Parse(content [][]rune, metainfo meta.Meta, inputs, operations Set, tokens Tokens) {
+	tokenizer.Tokenize(content, newParser(metainfo, inputs, operations, tokens))
 }
 
-func newParser(fields, operations Set, tokens Tokens) *parser {
+func newParser(metainfo meta.Meta, inputs, operations Set, tokens Tokens) *parser {
 	return &parser{
-		fields:     fields,
+		metainfo:   metainfo,
+		inputs:     inputs,
 		operations: operations,
 		tokens:     tokens,
 		headers:    map[string]ParsedToken{},
@@ -39,7 +42,8 @@ func newParser(fields, operations Set, tokens Tokens) *parser {
 }
 
 type parser struct {
-	fields      Set
+	metainfo    meta.Meta
+	inputs      Set
 	operations  Set
 	headers     map[string]ParsedToken
 	tokens      Tokens
@@ -88,20 +92,45 @@ func (p *parser) headerToken(token ParsedToken) {
 	if token.Type != tokenizer.CanonicalField && token.Type != tokenizer.Variable && token.Type != tokenizer.InvalidToken {
 		token.Diagnostic = "Rule header must be either canonical field or temporary variable"
 	}
-	if id, valueIsString := token.Value.(string); valueIsString {
-		if previousHeader, alreadyDefined := p.headers[id]; alreadyDefined {
-			token.Diagnostic = fmt.Sprintf("Redefinition of %q; previously defined at %d:%d",
-				id, previousHeader.Line+1, previousHeader.StartColumn+1)
-		}
-		p.headers[id] = token
-	}
 	if len(p.header) > 0 {
 		token.Diagnostic = "Rule header and body must be separated with '='"
 	}
+	if previousHeader, alreadyDefined := p.headers[token.Text]; alreadyDefined {
+		token.Diagnostic = fmt.Sprintf("Redefinition of %q; previously defined at %d:%d",
+			token.Text, previousHeader.Line+1, previousHeader.StartColumn+1)
+	}
+	if token.Type == tokenizer.CanonicalField {
+		if p.metainfo.Type(token.Text) == meta.Invalid {
+			token.Diagnostic = fmt.Sprintf("Canonical model does not have field %q", token.Text)
+		}
+	}
+	p.headers[token.Text] = token
 	p.header = append(p.header, token)
 }
 
 func (p *parser) bodyToken(token ParsedToken) {
+	if token.Type == tokenizer.CanonicalField {
+		if p.metainfo.Type(token.Text) == meta.Invalid {
+			token.Diagnostic = fmt.Sprintf("Canonical model does not have field %q", token.Text)
+		}
+	}
+	if token.Type == tokenizer.CanonicalField || token.Type == tokenizer.Variable {
+		if _, defined := p.headers[token.Text]; !defined {
+			token.Diagnostic = fmt.Sprintf("Field %q is not defined", token.Text)
+		}
+	}
+	if token.Type == tokenizer.Function {
+		if _, defined := p.operations[token.Text]; !defined {
+			token.Diagnostic = fmt.Sprintf("Operation %q is not defined", token.Text)
+		}
+	}
+	if token.Type == tokenizer.Input {
+		input, _ := token.Value.(string)
+		inputParts := strings.Split(input, ":")
+		if _, defined := p.inputs[inputParts[0]]; !defined {
+			token.Diagnostic = fmt.Sprintf("Input %q is not defined", token.Text)
+		}
+	}
 	p.body = append(p.body, token)
 }
 
@@ -110,9 +139,11 @@ func (p *parser) equalSign(token ParsedToken) {
 		if len(p.header) == 0 {
 			token.Diagnostic = "Rule header is missing"
 		}
-		p.header = append(p.header, token)
 		p.state = expectBody
+	} else {
+		token.Diagnostic = "Extra '='"
 	}
+	p.header = append(p.header, token)
 }
 
 func (p *parser) semicolon(token ParsedToken) {
@@ -165,5 +196,11 @@ func parseToken(token tokenizer.Token) ParsedToken {
 }
 
 func (p *parser) Done() {
+	for _, t := range p.header {
+		p.tokens.Token(t)
+	}
+	for _, t := range p.body {
+		p.tokens.Token(t)
+	}
 	p.tokens.Done()
 }

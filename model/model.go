@@ -1,8 +1,8 @@
 package model
 
 import (
-	"msg"
-	"util"
+	"league.com/rulemaker/msg"
+	"league.com/rulemaker/util"
 )
 
 type Connector interface {

@@ -8,6 +8,8 @@ import (
 	"strings"
 	"time"
 
+	"league.com/rulemaker/canonical_model"
+	"league.com/rulemaker/meta"
 	"league.com/rulemaker/parser"
 	"league.com/rulemaker/tokenizer"
 
@@ -15,6 +17,82 @@ import (
 )
 
 func main() {
+	metainfo := meta.Metainfo(canonical_model.EmployeeDTO{})
+
+	var inputs = parser.Set{
+		"policy":                        {},
+		"sin":                           {},
+		"employee_id":                   {},
+		"last_name":                     {},
+		"given_names":                   {},
+		"person_type":                   {},
+		"effective_date":                {},
+		"transaction_date":              {},
+		"division":                      {},
+		"benefit_class":                 {},
+		"administrative_class":          {},
+		"retirement_date":               {},
+		"termination_date":              {},
+		"deceased_date":                 {},
+		"birth_date":                    {},
+		"gender":                        {},
+		"language":                      {},
+		"street":                        {},
+		"city":                          {},
+		"province_state":                {},
+		"postal_zip_code":               {},
+		"foreign_country":               {},
+		"hire_date":                     {},
+		"province_of_employment":        {},
+		"province_of_residence":         {},
+		"employee_smoker":               {},
+		"business_location":             {},
+		"cost_centre":                   {},
+		"tax_exempt":                    {},
+		"does_employee_have_dependants": {},
+		"spouse_or_common_law_spouse":   {},
+		"num_of_dependants":             {},
+		"bank_transit_id":               {},
+		"bank_number":                   {},
+		"bank_account_number":           {},
+		"earnings_amount":               {},
+		"earnings_frequency":            {},
+		"dependant_name_on_drug_card":   {},
+		"revision_reason":               {},
+		"created_by":                    {},
+	}
+
+	var operations = parser.Set{
+		"strip_prefix":        {},
+		"strip_leading_zeros": {},
+		"first_of":            {},
+		"map":                 {},
+		"select":              {},
+		"all":                 {},
+		"any":                 {},
+		"one_of":              {},
+		"join":                {},
+		"+":                   {},
+		"*":                   {},
+		"=":                   {},
+		"!=":                  {},
+		"<":                   {},
+		">":                   {},
+		"<=":                  {},
+		">=":                  {},
+		"min":                 {},
+		"max":                 {},
+		"has":                 {},
+		"first_of_month":      {},
+		"weekly_hours":        {},
+		"config":              {},
+		"fail":                {},
+		"log":                 {},
+		"ticket":              {},
+		"contains":            {},
+		"skip":                {},
+	}
+
 	file, err := os.Open("emp.rules")
 	if err != nil {
 		panic(err)
@@ -38,7 +116,7 @@ func main() {
 	s.EnableMouse()
 	s.Clear()
 
-	w := window{screen: s, content: string(content)}
+	w := window{screen: s, content: string(content), metainfo: metainfo, inputs: inputs, operations: operations}
 
 	for {
 		w.draw()
@@ -73,10 +151,13 @@ func main() {
 }
 
 type window struct {
-	screen  tcell.Screen
-	title   string
-	status  string
-	content string
+	screen     tcell.Screen
+	title      string
+	status     string
+	content    string
+	metainfo   meta.Meta
+	inputs     parser.Set
+	operations parser.Set
 }
 
 var lineOffset = 0
@@ -115,7 +196,7 @@ func (w *window) draw() {
 		&errors{w: w, vSplit: vSplit, height: height},
 	)
 
-	parser.Parse(splitLines(w.content), nil, nil, t)
+	parser.Parse(splitLines(w.content), w.metainfo, w.inputs, w.operations, t)
 
 	w.screen.Show()
 }
