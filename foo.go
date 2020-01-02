@@ -9,6 +9,6 @@ func foo() (result []int) {
 	return result
 }
 
-func main() {
+func mainX() {
 	fmt.Printf("%v\n", foo())
 }

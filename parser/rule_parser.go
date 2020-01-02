@@ -90,8 +90,8 @@ func (p *parser) headerToken(token ParsedToken) {
 	}
 	if id, valueIsString := token.Value.(string); valueIsString {
 		if previousHeader, alreadyDefined := p.headers[id]; alreadyDefined {
-			token.Diagnostic = fmt.Sprintf("Redefinition of %q; previously defined at %d:%d-%d",
-				id, previousHeader.Line, previousHeader.StartColumn, previousHeader.EndColumn)
+			token.Diagnostic = fmt.Sprintf("Redefinition of %q; previously defined at %d:%d",
+				id, previousHeader.Line+1, previousHeader.StartColumn+1)
 		}
 		p.headers[id] = token
 	}
@@ -128,6 +128,7 @@ func (p *parser) semicolon(token ParsedToken) {
 	p.tokens.Token(token)
 	p.header = p.header[:0]
 	p.body = p.body[:0]
+	p.openIndices = p.openIndices[:0]
 	p.state = expectHeader
 }
 
@@ -149,8 +150,9 @@ func (p *parser) closeParen(token ParsedToken) {
 	}
 	if len(p.openIndices) == 0 {
 		token.Diagnostic = "Unbalanced ')'"
+	} else {
+		p.openIndices = p.openIndices[:len(p.openIndices)-1]
 	}
-	p.openIndices = p.openIndices[:len(p.openIndices)-1]
 	p.body = append(p.body, token)
 }
 

@@ -102,7 +102,7 @@ var fixture = []struct {
 		{Token: tokenizer.Token{tokenizer.EqualSign, 0, 3, 4, "=", nil}},
 		{Token: tokenizer.Token{tokenizer.IntegerLiteral, 0, 4, 5, "1", 1}},
 		{Token: tokenizer.Token{tokenizer.Semicolon, 0, 5, 6, ";", nil}},
-		{Token: tokenizer.Token{tokenizer.CanonicalField, 0, 6, 9, "foo", "foo"}, Diagnostic: "Redefinition of \"foo\"; previously defined at 0:0-3"},
+		{Token: tokenizer.Token{tokenizer.CanonicalField, 0, 6, 9, "foo", "foo"}, Diagnostic: "Redefinition of \"foo\"; previously defined at 1:1"},
 		{Token: tokenizer.Token{tokenizer.EqualSign, 0, 9, 10, "=", nil}},
 		{Token: tokenizer.Token{tokenizer.IntegerLiteral, 0, 10, 11, "2", 2}},
 		{Token: tokenizer.Token{tokenizer.Semicolon, 0, 11, 12, ";", nil}},
@@ -110,4 +110,6 @@ var fixture = []struct {
 	// TODO: validate fields/inputs/functions
 	// TODO: incomplete last rule
 	// TODO: comments after last rule
+	// TODO: multiple equal signs
+	// TODO: multiple semicolons
 }
