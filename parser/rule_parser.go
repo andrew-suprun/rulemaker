@@ -124,7 +124,7 @@ func (p *parser) bodyToken(token ParsedToken) {
 		input, _ := token.Value.(string)
 		inputParts := strings.Split(input, ":")
 		if _, defined := p.inputs[inputParts[0]]; !defined {
-			token.Diagnostic = fmt.Sprintf("Input %q is not defined", token.Text)
+			token.Diagnostic = fmt.Sprintf("Input field %q is not defined", token.Text)
 		}
 	}
 	p.body = append(p.body, token)
