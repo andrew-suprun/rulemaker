@@ -1,6 +1,7 @@
 package tokenizer
 
 // TODO: remove redundant EndColumn and rename StartColumn to Column
+// TODO: rename FloatingPoint to Real
 
 import (
 	"bytes"

@@ -12,6 +12,7 @@ import (
 	"league.com/rulemaker/meta"
 	"league.com/rulemaker/parser"
 	"league.com/rulemaker/tokenizer"
+	"league.com/rulemaker/view"
 
 	"github.com/gdamore/tcell"
 )
@@ -163,18 +164,17 @@ var lineNumberStyle = mainStyle.Foreground(tcell.ColorSilver).Background(tcell.C
 
 func (w *window) draw() {
 	width, height := w.screen.Size()
-	var vSplit = 48 // TODO: make it width - 50
+	var vSplit = width - 64
+	if width < 128 {
+		vSplit = width / 2
+	}
 
-	for row := 2; row < height-1; row++ {
-		for col := 5; col < width; col++ {
-			w.screen.SetContent(col, row, ' ', nil, mainStyle)
-		}
-	}
-	for row := 2; row < height-1; row++ {
-		for col := 0; col < 5; col++ {
-			w.screen.SetContent(col, row, ' ', nil, lineNumberStyle)
-		}
-	}
+	mainView := view.NewView(w.screen, 5, vSplit, 2, height-1)
+	lineNumberView := view.NewView(w.screen, 0, 5, 2, height-1)
+	diagnosticView := view.NewView(w.screen, vSplit, width, 2, height-1)
+	mainView.Clear(mainStyle)
+	lineNumberView.Clear(lineNumberStyle)
+	diagnosticView.Clear(mainStyle)
 
 	// w.showPalette()
 
@@ -196,10 +196,9 @@ func (w *window) draw() {
 	tokenizer.Tokenize(w.content,
 		parser.NewParser(w.metainfo, w.inputs, w.operations,
 			newTee(
-				// &errors{w: w, vSplit: vSplit, height: height}, // TODO: move right
-				NewWrapper(5, vSplit,
-					&tokens{w: w, vSplit: vSplit, height: height},
-				),
+				&errors{view: diagnosticView},
+				&tokens{view: mainView},
+				&lineNumbers{view: lineNumberView},
 			),
 		),
 	)
@@ -207,66 +206,13 @@ func (w *window) draw() {
 	w.screen.Show()
 }
 
-type PositionedTokens interface {
-	Token(token PositionedToken)
-	Done()
-}
-
-type PositionedToken struct {
-	parser.ParsedToken
-	X, Y int
-}
-
-func (t PositionedToken) String() string {
-	return fmt.Sprintf("<positioned token: %s; position: %d:%d>", t.Token, t.Y, t.X)
-}
-
-type wrapper struct {
-	lMargin, rMargin     int
-	tokens               PositionedTokens
-	lineOffset           int
-	lastX, lastY         int
-	lastColumn, lastLine int
-}
-
-func NewWrapper(lMargin, rMargin int, tokens PositionedTokens) parser.Tokens {
-	return &wrapper{lMargin: lMargin, rMargin: rMargin, tokens: tokens}
-}
-
-func (w *wrapper) Token(token parser.ParsedToken) {
-	outToken := PositionedToken{
-		ParsedToken: token,
-		X:           token.StartColumn - w.lastColumn + w.lastX,
-		Y:           token.Line - w.lastLine + w.lastY, //+ w.lineOffset,
-	}
-	if outToken.X+len(token.Text) > w.rMargin {
-		outToken.X = w.lMargin + 4
-		outToken.Y++
-		// w.lineOffset++
-	}
-	if w.lastLine != token.Line {
-		outToken.X = w.lMargin + token.StartColumn
-	}
-	// log.Printf("### wrapper: outToken.X=%d  len(token.Text)=%d  w.rMargin=%d", outToken.X, len(token.Text), w.rMargin)
-	w.lastX = outToken.X
-	w.lastY = outToken.Y
-	w.lastColumn = token.StartColumn
-	w.lastLine = token.Line
-	w.tokens.Token(outToken)
-}
-
-func (w *wrapper) Done() {
-	w.tokens.Done()
-}
-
 type tokens struct {
-	w              *window
-	vSplit, height int
-	shownLines     int
+	view view.View
 }
 
-func (t *tokens) Token(token PositionedToken) {
-	if token.Y < lineOffset || token.Y >= lineOffset+t.height-3 {
+func (t *tokens) Token(token parser.ParsedToken) {
+	t.view.SetOffsets(0, lineOffset)
+	if token.Line < lineOffset || token.Line >= lineOffset+t.view.Height() {
 		return
 	}
 	tokenStyle := mainStyle
@@ -303,33 +249,35 @@ func (t *tokens) Token(token PositionedToken) {
 	if token.Diagnostic != "" {
 		tokenStyle = tokenStyle.Foreground(tcell.ColorRed).Bold(true).Bold(true)
 	}
-	for ; t.shownLines <= token.Y; t.shownLines++ {
-		if t.shownLines < lineOffset {
-			continue
-		}
-		emitStr(t.w.screen, 0, t.shownLines+2-lineOffset, lineNumberStyle, fmt.Sprintf("%4d ", t.shownLines+1))
-	}
 
-	emitStr(t.w.screen, token.X, token.Y+2-lineOffset, tokenStyle, token.Text)
+	t.view.SetText(token.Text, token.StartColumn, token.Line, tokenStyle)
 }
 
-func (t *tokens) Done() {
-	// for line := lineOffset; line < lineOffset+t.height-3; line++ {
-	// 	emitStr(t.w.screen, 0, line+2-lineOffset, style, fmt.Sprintf("%4d ", line+1))
-	// }
+func (t *tokens) Done() {}
+
+type lineNumbers struct {
+	view view.View
 }
+
+func (n *lineNumbers) Token(token parser.ParsedToken) {
+	n.view.SetOffsets(0, lineOffset)
+	number := fmt.Sprintf("%4d", token.Line+1)
+	n.view.SetText(number, 0, token.Line, lineNumberStyle)
+}
+
+func (n *lineNumbers) Done() {}
 
 type errors struct {
-	w                          *window
-	vSplit, height, reportLine int
+	view       view.View
+	reportLine int
 }
 
 func (t *errors) Token(token parser.ParsedToken) {
 	if token.Diagnostic != "" {
 		message := fmt.Sprintf("%d:%d %s", token.Line+1, token.StartColumn+1, token.Diagnostic)
-		lines := wrapLines(message, t.vSplit)
+		lines := wrapLines(message, t.view.Width())
 		for _, line := range lines {
-			emitStr(t.w.screen, 1, t.reportLine+2, mainStyle, line)
+			t.view.SetText(line, 1, t.reportLine, mainStyle)
 			t.reportLine++
 		}
 	}
@@ -340,10 +288,11 @@ func (t *errors) Done() {
 }
 
 func wrapLines(str string, w int) (result []string) {
-	if len(str) > w {
-		result = append(result, str[:w])
-		str = str[w:]
+	if len(str) <= w {
+		return []string{str}
 	}
+	result = []string{str[:w]}
+	str = str[w:]
 	for len(str) > w-4 {
 		result = append(result, "    "+str[:w-4])
 		str = str[w-4:]
