@@ -81,6 +81,7 @@ type window struct {
 }
 
 func (w *window) resize() {
+	w.screen.Sync()
 	w.width, w.height = w.screen.Size()
 	w.vSplit = w.width - 64
 	if w.width < 128 {
