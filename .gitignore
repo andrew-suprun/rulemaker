@@ -3,3 +3,4 @@
 *.rules
 *.log
 .DS_Store
+tmp

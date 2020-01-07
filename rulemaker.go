@@ -7,15 +7,15 @@ import (
 	"league.com/rulemaker/content"
 
 	"league.com/rulemaker/canonical_model"
+	"league.com/rulemaker/diagnostics"
 	"league.com/rulemaker/meta"
-	"league.com/rulemaker/parser"
 	"league.com/rulemaker/window"
 )
 
 func main() {
 	metainfo := meta.Metainfo(canonical_model.EmployeeDTO{})
 
-	var inputs = parser.Set{
+	var inputs = diagnostics.Set{
 		"policy":                        {},
 		"sin":                           {},
 		"employee_id":                   {},
@@ -58,7 +58,7 @@ func main() {
 		"created_by":                    {},
 	}
 
-	var operations = parser.Set{
+	var operations = diagnostics.Set{
 		"strip_prefix":        {},
 		"strip_leading_zeros": {},
 		"first_of":            {},
@@ -89,6 +89,7 @@ func main() {
 		"skip":                {},
 	}
 
+	// c, e := content.NewContent("test.rules")
 	c, e := content.NewContent("emp.rules")
 	if e != nil {
 		fmt.Fprintf(os.Stderr, "%v\n", e)

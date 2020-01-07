@@ -1,8 +1,5 @@
 package tokenizer
 
-// TODO: remove redundant EndColumn and rename StartColumn to Column
-// TODO: rename FloatingPoint to Real
-
 import (
 	"bytes"
 	"fmt"
@@ -11,44 +8,55 @@ import (
 	"unicode"
 )
 
-func Tokenize(content [][]rune, tokens Tokens) {
-	tokenizer := &tokenizer{
-		content: content,
-		tokens:  tokens,
+func Tokenize(content [][]rune) Tokens {
+	tokens := make(Tokens, len(content))
+	for i, line := range content {
+		tokens[i] = TokenizeLine(line)
 	}
-	tokenizer.tokenize()
+	for {
+		lastLine := tokens[len(tokens)-1]
+		if len(lastLine) == 0 {
+			tokens = tokens[:len(tokens)-1]
+		} else {
+			break
+		}
+	}
+	return tokens
 }
 
-type Tokens interface {
-	Token(token Token)
-	Done()
+func TokenizeLine(runes []rune) TokenLine {
+	tokenizer := &tokenizer{
+		runes: runes,
+	}
+	return tokenizer.tokenizeLine()
 }
+
+type Tokens []TokenLine
+
+type TokenLine []Token
 
 type Token struct {
-	Type        TokenType
-	Line        int
-	StartColumn int
-	EndColumn   int
-	Text        string
-	Value       interface{}
+	Type   TokenType
+	Column int
+	Text   string
+	Value  interface{}
 }
 
 func (t Token) String() string {
-	return fmt.Sprintf("<token %d:%d-%d: %q value:%v type:%s>", t.Line, t.StartColumn, t.EndColumn, t.Text, t.Value, t.Type)
+	return fmt.Sprintf("<%s %q column:%d value:%v>", t.Type, t.Text, t.Column, t.Value)
 }
 
 type TokenType int
 
 const (
 	InvalidToken TokenType = iota
-	CanonicalField
+	Identifier
 	Variable
-	Function
 	Input
 	Label
 	StringLiteral
 	IntegerLiteral
-	FloatingPointLiteral
+	RealLiteral
 	BooleanLiteral
 	NilLiteral
 	DateLiteral
@@ -67,12 +75,10 @@ func (t TokenType) String() string {
 	switch t {
 	case InvalidToken:
 		return "InvalidToken"
-	case CanonicalField:
-		return "CanonicalField"
+	case Identifier:
+		return "Identifier"
 	case Variable:
 		return "Variable"
-	case Function:
-		return "Function"
 	case Input:
 		return "Input"
 	case Label:
@@ -81,8 +87,8 @@ func (t TokenType) String() string {
 		return "StringLiteral"
 	case IntegerLiteral:
 		return "IntegerLiteral"
-	case FloatingPointLiteral:
-		return "FloatingPointLiteral"
+	case RealLiteral:
+		return "RealLiteral"
 	case BooleanLiteral:
 		return "BooleanLiteral"
 	case NilLiteral:
@@ -112,29 +118,19 @@ func (t TokenType) String() string {
 }
 
 type tokenizer struct {
-	content     [][]rune
-	lineContent []rune
-	line        int
-	column      int
-	tokens      Tokens
-	issuedToken Token
+	runes  []rune
+	column int
+	tokens TokenLine
 }
 
-func (t *tokenizer) tokenize() {
-	for t.line, t.lineContent = range t.content {
-		t.tokenizeLine()
-	}
-	t.tokens.Done()
-}
-
-func (t *tokenizer) tokenizeLine() {
+func (t *tokenizer) tokenizeLine() TokenLine {
 	t.column = 0
 	for {
 		t.skipSpace()
-		if t.column >= len(t.lineContent) {
-			return
+		if t.column >= len(t.runes) {
+			return t.tokens
 		}
-		ch := t.lineContent[t.column]
+		ch := t.runes[t.column]
 		switch ch {
 		case '#':
 			t.comment()
@@ -157,7 +153,7 @@ func (t *tokenizer) tokenizeLine() {
 func (t *tokenizer) regularToken() {
 	startColumn := t.column
 	t.skipToSeparator()
-	tokenText := t.lineContent[startColumn:t.column]
+	tokenText := t.runes[startColumn:t.column]
 	token := string(tokenText)
 	firstRune := tokenText[0]
 	lastRune := tokenText[len(tokenText)-1]
@@ -187,7 +183,7 @@ func (t *tokenizer) regularToken() {
 
 	floatValue, err := strconv.ParseFloat(string(tokenText), 64)
 	if err == nil {
-		t.token(FloatingPointLiteral, startColumn, floatValue)
+		t.token(RealLiteral, startColumn, floatValue)
 		return
 	}
 
@@ -217,17 +213,13 @@ func (t *tokenizer) regularToken() {
 	case "today":
 		t.token(TodayLiteral, startColumn, nil)
 	default:
-		if t.issuedToken.Type == OpenParen {
-			t.token(Function, startColumn, token)
-		} else {
-			t.token(CanonicalField, startColumn, token)
-		}
+		t.token(Identifier, startColumn, token)
 	}
 }
 
 func (t *tokenizer) comment() {
 	startColumn := t.column
-	t.column = len(t.lineContent)
+	t.column = len(t.runes)
 	t.token(Comment, startColumn, nil)
 }
 
@@ -238,8 +230,8 @@ func (t *tokenizer) stringLiteral() {
 	closed := false
 	buf := bytes.Buffer{}
 loop:
-	for ; t.column < len(t.lineContent); t.column++ {
-		ch := t.lineContent[t.column]
+	for ; t.column < len(t.runes); t.column++ {
+		ch := t.runes[t.column]
 		switch ch {
 		case '\n':
 			escape = true
@@ -293,25 +285,22 @@ func (t *tokenizer) closeParen() {
 }
 
 func (t *tokenizer) token(tokenType TokenType, startColumn int, value interface{}) {
-	t.issuedToken = Token{
-		Type:        tokenType,
-		Line:        t.line,
-		StartColumn: startColumn,
-		EndColumn:   t.column,
-		Text:        string(t.lineContent[startColumn:t.column]),
-		Value:       value,
-	}
-	t.tokens.Token(t.issuedToken)
+	t.tokens = append(t.tokens, Token{
+		Type:   tokenType,
+		Column: startColumn,
+		Text:   string(t.runes[startColumn:t.column]),
+		Value:  value,
+	})
 }
 
 func (t *tokenizer) skipSpace() {
-	for ; t.column < len(t.lineContent) && unicode.IsSpace(t.lineContent[t.column]); t.column++ {
+	for ; t.column < len(t.runes) && unicode.IsSpace(t.runes[t.column]); t.column++ {
 	}
 }
 
 func (t *tokenizer) skipToSeparator() {
-	for ; t.column < len(t.lineContent); t.column++ {
-		ch := t.lineContent[t.column]
+	for ; t.column < len(t.runes); t.column++ {
+		ch := t.runes[t.column]
 		if ch == '=' || ch == '(' || ch == ')' || ch == ';' || unicode.IsSpace(ch) {
 			return
 		}
