@@ -75,9 +75,10 @@ type window struct {
 	tokens      tokenizer.Tokens
 	diagnostics []diagnostics.Diagnostic
 
-	lineOffset int
-	cursorX    int
-	cursorY    int
+	lineOffset   int
+	columnOffset int
+	cursorX      int
+	cursorY      int
 }
 
 func (w *window) resize() {
@@ -122,16 +123,37 @@ func (w *window) clear() {
 
 func (w *window) draw() {
 	w.clear()
-	w.mainView.SetOffsets(0, w.lineOffset)
-	w.lineNumberView.SetOffsets(0, w.lineOffset)
-	w.mainView.ShowCursor(w.cursorX, w.cursorY, false)
+	w.mainView.SetOffsets(w.columnOffset, w.lineOffset)
+	w.lineNumberView.SetOffsets(w.columnOffset, w.lineOffset)
+	w.mainView.ShowCursor(w.cursorX, w.cursorY)
 
 	w.tokens = tokenizer.Tokenize(w.content.Runes())
 	w.diagnostics = diagnostics.ScanTokens(w.metainfo, w.inputs, w.operations, w.tokens)
 	w.showText()
 	w.showLineNumbers()
 	w.showDiagnostics()
+	w.showStatus()
 	w.screen.Show()
+}
+
+func (w *window) ensureCursorVisible() {
+	log.Printf("### setCursorVisibility: %d:%d\n", w.cursorX, w.cursorY)
+	if w.cursorX < w.columnOffset {
+		w.columnOffset = w.cursorX
+		log.Printf("### setCursorVisibility: columnOffset=%v\n", w.columnOffset)
+	}
+	if w.cursorX >= w.columnOffset+w.mainView.Width() {
+		w.columnOffset = w.cursorX - w.mainView.Width() + 1
+		log.Printf("### setCursorVisibility: columnOffset=%v\n", w.columnOffset)
+	}
+	if w.cursorY < w.lineOffset {
+		w.lineOffset = w.cursorY
+		log.Printf("### setCursorVisibility: lineOffset=%v\n", w.lineOffset)
+	}
+	if w.cursorY >= w.lineOffset+w.mainView.Height() {
+		w.lineOffset = w.cursorY - w.mainView.Height() + 1
+		log.Printf("### setCursorVisibility: lineOffset=%v\n", w.lineOffset)
+	}
 }
 
 func (w *window) showText() {
@@ -209,9 +231,7 @@ func (w *window) showDiagnostics() {
 		token := w.tokens[d.LineIndex][d.TokenIndex]
 		message := fmt.Sprintf("%d:%d %s", d.LineIndex+1, token.Column+1, d.Message)
 		lines := wrapLines(message, w.diagnosticView.Width())
-		log.Printf("---- w=%d ----\n", w.diagnosticView.Width())
 		for _, line := range lines {
-			log.Printf("%q %d\n", line, len(line))
 			w.diagnosticView.SetText(line, 0, reportLine, mainStyle)
 			reportLine++
 		}
@@ -232,6 +252,13 @@ func wrapLines(str string, w int) (result []string) {
 	return result
 }
 
+func (w *window) showStatus() {
+	lineIndex := w.cursorY + w.lineOffset + 1
+	column := w.cursorX + w.columnOffset + 1
+
+	w.statusView.SetText(fmt.Sprintf("%s %d:%d", w.content.Path(), lineIndex, column), 1, 0, menuStyle)
+}
+
 func (w *window) Run() {
 	for w.handleEvent(w.screen.PollEvent()) {
 		w.draw()
@@ -243,8 +270,6 @@ func (w *window) handleEvent(ev tcell.Event) bool {
 	case *tcell.EventResize:
 		w.resize()
 	case *tcell.EventKey:
-		// log.Printf("Key=%v\n", ev.Key())
-		// log.Printf("Rune=%v\n", ev.Rune())
 		if ev.Key() == tcell.KeyCtrlQ {
 			w.screen.Fini()
 			return false
@@ -252,24 +277,46 @@ func (w *window) handleEvent(ev tcell.Event) bool {
 			w.cursorX--
 		} else if ev.Key() == tcell.KeyRight {
 			w.cursorX++
-		} else if ev.Key() == tcell.KeyUp && w.cursorY > 0 {
-			w.cursorY--
+		} else if ev.Key() == tcell.KeyUp {
+			if w.cursorY > 0 || w.lineOffset > 0 {
+				w.cursorY--
+			}
 		} else if ev.Key() == tcell.KeyDown {
 			w.cursorY++
 		} else if ev.Key() == tcell.KeyCtrlA {
 			w.cursorX = 0
 		} else if ev.Key() == tcell.KeyCtrlE {
-			w.cursorX = 0
+			lineIndex := w.cursorY
+			lineLength := len(w.content.Runes()[lineIndex])
+			w.cursorX = lineLength
+			log.Printf("### handleEvent: w.cursorY=%d  w.lineOffset=%d  lineIndex=%d  lineLength=%d  w.cursorX=%d\n", w.cursorY, w.lineOffset, lineIndex, lineLength, w.cursorX)
 		}
+		w.ensureCursorVisible()
 	case *tcell.EventMouse:
-		// x, y := ev.Position()
+		x, y := ev.Position()
 		button := ev.Buttons()
+		if button == tcell.Button1 {
+			log.Printf("### handleEvent: position=%d:%d\n", x, y)
+			if w.mainView.Contains(x, y) {
+				w.cursorX, w.cursorY = w.mainView.CursorFromPhysicalCoordinates(x, y)
+			}
+			if w.lineNumberView.Contains(x, y) {
+				_, w.cursorY = w.mainView.CursorFromPhysicalCoordinates(x, y)
+				w.cursorX = 0
+				w.ensureCursorVisible()
+			}
+		}
+
 		// log.Printf("### event: %d:%d %x\n", x, y, button)
 		if button&tcell.WheelUp != 0 && w.lineOffset > 0 {
 			w.lineOffset--
+			w.cursorY++
+			log.Printf("### handleEvent: lineOffset=%d\n", w.lineOffset)
 		}
 		if button&tcell.WheelDown != 0 && w.lineOffset < len(w.tokens)-1 {
 			w.lineOffset++
+			w.cursorY--
+			log.Printf("### handleEvent: lineOffset=%d\n", w.lineOffset)
 		}
 	}
 	return true

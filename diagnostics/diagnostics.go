@@ -26,7 +26,7 @@ func ScanTokens(metainfo meta.Meta, inputs, operations Set, tokens tokenizer.Tok
 		inputs:     inputs,
 		operations: operations,
 		tokens:     tokens,
-		headers:    map[string]tokenizer.Token{},
+		headers:    map[string]tokenPosition{},
 	}
 	p.scanTokens()
 
@@ -52,7 +52,7 @@ type scanner struct {
 	inputs            Set
 	operations        Set
 	tokens            tokenizer.Tokens
-	headers           map[string]tokenizer.Token
+	headers           map[string]tokenPosition
 	diagnostics       []Diagnostic
 	state             state
 	header            []tokenizer.Token
@@ -126,16 +126,17 @@ func (s *scanner) headerToken() {
 	if len(s.header) > 0 {
 		s.report("Rule header and body must be separated with '='")
 	}
-	if previousHeader, alreadyDefined := s.headers[s.token.Text]; alreadyDefined {
+	if position, alreadyDefined := s.headers[s.token.Text]; alreadyDefined {
+		previousHeader := s.tokens[position.lineIndex][position.tokenIndex]
 		s.report("Redefinition of %q previously defined at %d:%d",
-			s.token.Text, 999, previousHeader.Column+1) // TODO: fix line
+			s.token.Text, position.lineIndex, previousHeader.Column+1) // TODO: fix line
 	}
 	if s.token.Type == tokenizer.Identifier {
 		if s.metainfo.Type(s.token.Text) == meta.Invalid {
 			s.report("Canonical model does not have field %q", s.token.Text)
 		}
 	}
-	s.headers[s.token.Text] = s.token
+	s.headers[s.token.Text] = tokenPosition{lineIndex: s.lineIndex, tokenIndex: s.tokenIndex}
 	s.header = append(s.header, s.token)
 }
 
