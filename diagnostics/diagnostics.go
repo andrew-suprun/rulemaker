@@ -150,8 +150,7 @@ func (s *scanner) bodyToken() {
 			if s.metainfo.Type(s.token.Text) == meta.Invalid {
 				s.report("Canonical model does not have field %q", s.token.Text)
 			}
-		}
-		if s.token.Type == tokenizer.Identifier || s.token.Type == tokenizer.Variable {
+		} else if s.token.Type == tokenizer.Identifier || s.token.Type == tokenizer.Variable {
 			if _, defined := s.headers[s.token.Text]; !defined {
 				s.report("Field %q is not defined", s.token.Text)
 			}

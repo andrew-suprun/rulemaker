@@ -51,6 +51,7 @@ var defStyle tcell.Style
 
 var mainStyle = tcell.StyleDefault.Foreground(tcell.ColorWhite).Background(tcell.NewRGBColor(0, 0, 63))
 var lineNumberStyle = mainStyle.Foreground(tcell.ColorSilver).Background(tcell.ColorBlack)
+var lineNumberStyleCurrent = mainStyle.Foreground(tcell.ColorBlack).Background(tcell.ColorSilver)
 var menuStyle tcell.Style = defStyle.Background(tcell.ColorSilver)
 
 type window struct {
@@ -74,10 +75,16 @@ type window struct {
 	tokens      tokenizer.Tokens
 	diagnostics []diagnostics.Diagnostic
 
+	diagnosticViewPointers []point
+
 	lineOffset   int
 	columnOffset int
 	cursorX      int
 	cursorY      int
+}
+
+type point struct {
+	x, y int
 }
 
 func (w *window) resize() {
@@ -116,7 +123,7 @@ func (w *window) clear() {
 
 	w.titleView.SetText("Rule Maker", 1, 0, defStyle.Bold(true))
 	w.titleView.SetText(time.Now().Format("2006-01-02"), w.width-11, 0, defStyle.Bold(true))
-	w.menuView.SetText("(Ctrl-Q) Quit", 1, 0, menuStyle)
+	w.menuView.SetText("(Ctrl-Q) Quit  (Ctrl-N) Next Error  (Ctrl-P) Previous error", 1, 0, menuStyle)
 	w.statusView.SetText(fmt.Sprintf("%s", w.content.Path()), 1, 0, menuStyle)
 }
 
@@ -212,21 +219,27 @@ func (w *window) showToken(token tokenizer.Token, tokenLine int, diagnosticMessa
 }
 
 func (w *window) showLineNumbers() {
-	format := fmt.Sprintf("%%%dd", w.lineNumberView.Width()-2)
+	format := fmt.Sprintf(" %%%dd ", w.lineNumberView.Width()-2)
 	for i := 0; i < len(w.content.Runes()); i++ {
 		number := fmt.Sprintf(format, i+1)
-		w.lineNumberView.SetText(number, 1, i, lineNumberStyle)
+		if i == w.cursorY {
+			w.lineNumberView.SetText(number, 0, i, lineNumberStyleCurrent)
+		} else {
+			w.lineNumberView.SetText(number, 0, i, lineNumberStyle)
+		}
 	}
 }
 
 func (w *window) showDiagnostics() {
 	reportLine := 0
+	w.diagnosticViewPointers = []point{}
 	for _, d := range w.diagnostics {
 		token := w.tokens[d.LineIndex][d.TokenIndex]
 		message := fmt.Sprintf("%d:%d %s", d.LineIndex+1, token.Column+1, d.Message)
 		lines := wrapLines(message, w.diagnosticView.Width())
 		for _, line := range lines {
 			w.diagnosticView.SetText(line, 0, reportLine, mainStyle)
+			w.diagnosticViewPointers = append(w.diagnosticViewPointers, point{token.Column, d.LineIndex})
 			reportLine++
 		}
 	}
@@ -285,9 +298,6 @@ func (w *window) handleEvent(ev tcell.Event) bool {
 			w.content.SplitLine(w.cursorY, w.cursorX)
 			w.cursorX = 0
 			w.cursorY++
-		} else if ev.Key() == tcell.KeyCtrlQ {
-			w.screen.Fini()
-			return false
 		} else if ev.Key() == tcell.KeyLeft && w.cursorX > 0 {
 			w.cursorX--
 		} else if ev.Key() == tcell.KeyRight {
@@ -323,6 +333,34 @@ func (w *window) handleEvent(ev tcell.Event) bool {
 			if w.lineOffset >= lineNum {
 				w.lineOffset = lineNum - 1
 			}
+		} else if ev.Key() == tcell.KeyCtrlP {
+			for i := len(w.diagnostics) - 1; i >= 0; i-- {
+				d := w.diagnostics[i]
+				if d.LineIndex > w.cursorY {
+					continue
+				}
+				token := w.tokens[d.LineIndex][d.TokenIndex]
+				if d.LineIndex < w.cursorY || token.Column < w.cursorX {
+					w.cursorX = token.Column
+					w.cursorY = d.LineIndex
+					break
+				}
+			}
+		} else if ev.Key() == tcell.KeyCtrlN {
+			for _, d := range w.diagnostics {
+				if d.LineIndex < w.cursorY {
+					continue
+				}
+				token := w.tokens[d.LineIndex][d.TokenIndex]
+				if d.LineIndex > w.cursorY || token.Column > w.cursorX {
+					w.cursorX = token.Column
+					w.cursorY = d.LineIndex
+					break
+				}
+			}
+		} else if ev.Key() == tcell.KeyCtrlQ {
+			w.screen.Fini()
+			return false
 		}
 		w.ensureCursorVisible()
 	case *tcell.EventMouse:
@@ -331,12 +369,17 @@ func (w *window) handleEvent(ev tcell.Event) bool {
 		if button == tcell.Button1 {
 			if w.mainView.Contains(x, y) {
 				w.cursorX, w.cursorY = w.mainView.CursorFromPhysicalCoordinates(x, y)
-			}
-			if w.lineNumberView.Contains(x, y) {
-				_, w.cursorY = w.mainView.CursorFromPhysicalCoordinates(x, y)
+			} else if w.lineNumberView.Contains(x, y) {
+				_, w.cursorY = w.lineNumberView.CursorFromPhysicalCoordinates(x, y)
 				w.cursorX = 0
 				w.ensureCursorVisible()
+			} else if w.diagnosticView.Contains(x, y) {
+				_, lineNum := w.diagnosticView.CursorFromPhysicalCoordinates(x, y)
+				p := w.diagnosticViewPointers[lineNum]
+				w.cursorX = p.x
+				w.cursorY = p.y
 			}
+			w.ensureCursorVisible()
 		}
 
 		if button&tcell.WheelUp != 0 && w.lineOffset > 0 {
