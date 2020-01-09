@@ -64,7 +64,7 @@ func (v *view) SetText(text string, x, y int, style tcell.Style) {
 	if x+len(text) < 0 {
 		return
 	}
-	if x >= +v.width {
+	if x >= v.width {
 		return
 	}
 	if y < 0 {
@@ -73,16 +73,14 @@ func (v *view) SetText(text string, x, y int, style tcell.Style) {
 	if y >= v.height {
 		return
 	}
-	leftCut, rightCut := 0, len(text)
 	if x < 0 {
-		leftCut = -x
+		text = text[-x:]
 		x = 0
 	}
-	if x+len(text) >= v.width {
-		rightCut = v.width - x
-	}
 
-	text = text[leftCut:rightCut]
+	if len(text) >= v.width-x {
+		text = text[:v.width-x]
+	}
 
 	x = x + v.left
 	y = y + v.top
