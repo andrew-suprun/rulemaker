@@ -4,18 +4,17 @@ import (
 	"fmt"
 	"os"
 
-	"league.com/rulemaker/content"
-
 	"league.com/rulemaker/canonical_model"
-	"league.com/rulemaker/diagnostics"
+	"league.com/rulemaker/content"
 	"league.com/rulemaker/meta"
+	"league.com/rulemaker/model"
 	"league.com/rulemaker/window"
 )
 
 func main() {
 	metainfo := meta.Metainfo(canonical_model.EmployeeDTO{})
 
-	var inputs = diagnostics.Set{
+	var inputs = model.Set{
 		"policy":                        {},
 		"sin":                           {},
 		"employee_id":                   {},
@@ -58,7 +57,7 @@ func main() {
 		"created_by":                    {},
 	}
 
-	var operations = diagnostics.Set{
+	var operations = model.Set{
 		"strip_prefix":        {},
 		"strip_leading_zeros": {},
 		"first_of":            {},

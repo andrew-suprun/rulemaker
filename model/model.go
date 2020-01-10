@@ -5,6 +5,8 @@ import (
 	"league.com/rulemaker/util"
 )
 
+type Set map[string]struct{}
+
 type Connector interface {
 	FetchFiles() (result Files, err error)
 }

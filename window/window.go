@@ -5,9 +5,10 @@ import (
 	"time"
 
 	"league.com/rulemaker/content"
+	"league.com/rulemaker/model"
+	"league.com/rulemaker/parser"
 
 	"github.com/gdamore/tcell"
-	"league.com/rulemaker/diagnostics"
 	"league.com/rulemaker/meta"
 	"league.com/rulemaker/tokenizer"
 	"league.com/rulemaker/view"
@@ -17,7 +18,7 @@ type Window interface {
 	Run()
 }
 
-func NewWindow(c content.Content, metainfo meta.Meta, inputs, operations diagnostics.Set) (Window, error) {
+func NewWindow(c content.Content, metainfo meta.Meta, inputs, operations model.Set) (Window, error) {
 	screen, e := tcell.NewScreen()
 	if e != nil {
 		return nil, e
@@ -30,13 +31,10 @@ func NewWindow(c content.Content, metainfo meta.Meta, inputs, operations diagnos
 	screen.Clear()
 
 	w := &window{
-		content:    c,
-		metainfo:   metainfo,
-		inputs:     inputs,
-		operations: operations,
-		screen:     screen,
+		content: c,
+		parser:  parser.NewParser(metainfo, inputs, operations),
+		screen:  screen,
 	}
-	w.resize()
 	w.draw()
 	return w, nil
 }
@@ -57,6 +55,8 @@ var menuStyle tcell.Style = defStyle.Background(tcell.ColorSilver)
 type window struct {
 	content content.Content
 
+	parser parser.Parser
+
 	screen        tcell.Screen
 	width, height int
 	vSplit        int
@@ -68,12 +68,8 @@ type window struct {
 	lineNumberView view.View
 	diagnosticView view.View
 
-	metainfo   meta.Meta
-	inputs     diagnostics.Set
-	operations diagnostics.Set
-
 	tokens      tokenizer.Tokens
-	diagnostics []diagnostics.Diagnostic
+	diagnostics []parser.Diagnostic
 
 	diagnosticViewPointers []point
 
@@ -134,7 +130,9 @@ func (w *window) draw() {
 	w.mainView.ShowCursor(w.cursorX, w.cursorY)
 
 	w.tokens = tokenizer.Tokenize(w.content.Runes())
-	w.diagnostics = diagnostics.ScanTokens(w.metainfo, w.inputs, w.operations, w.tokens)
+	w.parser.Parse(w.tokens)
+	w.diagnostics = w.parser.Diagnostics()
+	// w.diagnostics = diagnostics.ScanTokens(w.metainfo, w.inputs, w.operations, w.tokens)
 	w.showText()
 	w.showLineNumbers()
 	w.showDiagnostics()
@@ -160,7 +158,7 @@ func (w *window) ensureCursorVisible() {
 func (w *window) showText() {
 	diagnosticsIndex := 0
 	for _, token := range w.tokens {
-		var d *diagnostics.Diagnostic
+		var d *parser.Diagnostic
 		if diagnosticsIndex < len(w.diagnostics) &&
 			w.diagnostics[diagnosticsIndex].Line == token.Line &&
 			w.diagnostics[diagnosticsIndex].Column == token.Column {
@@ -171,7 +169,7 @@ func (w *window) showText() {
 	}
 }
 
-func (w *window) showToken(token tokenizer.Token, diagnosticMessage *diagnostics.Diagnostic) {
+func (w *window) showToken(token tokenizer.Token, diagnosticMessage *parser.Diagnostic) {
 	if token.Line < w.lineOffset || token.Line >= w.lineOffset+w.mainView.Height() {
 		return
 	}
