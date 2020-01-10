@@ -78,26 +78,26 @@ var fixture = []struct {
 	{"foo = 1;# comment", nil},
 	{"foo = 1", nil},
 	{"foo=1;foo=2;", []Diagnostic{
-		{0, 4, "Redefinition of \"foo\" previously defined at 999:1"}, // TODO: should be 1:1
+		{0, 6, "Redefinition of \"foo\" previously defined at 1:1"},
 	}},
 	{"foo=(baz 123);", nil},
 	{"foo=(unknown 123);", []Diagnostic{
-		{0, 3, "Operation \"unknown\" is not defined"},
+		{0, 5, "Operation \"unknown\" is not defined"},
 	}},
 	{"foo = = 1y;", []Diagnostic{
-		{0, 2, "Extra '='"},
+		{0, 6, "Extra '='"},
 	}},
 	{"foo = 1m;;;", nil},
 	{"bar=foo;", []Diagnostic{
-		{0, 2, "Field \"foo\" is not defined"},
+		{0, 4, "Canonical field \"foo\" is not defined"},
 	}},
 	{"foo = 1m;bar=foo;", nil},
 	{"foo = $x; bar = $a;", []Diagnostic{
-		{0, 6, "Input field \"$a\" is not defined"},
+		{0, 16, "Input field \"$a\" is not defined"},
 	}},
 	{"foo = (((;", []Diagnostic{
-		{0, 2, "Unbalanced '('"},
-		{0, 3, "Unbalanced '('"},
-		{0, 4, "Unbalanced '('"},
+		{0, 6, "Unbalanced '('"},
+		{0, 7, "Unbalanced '('"},
+		{0, 8, "Unbalanced '('"},
 	}},
 }

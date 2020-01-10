@@ -10,12 +10,12 @@ import (
 )
 
 type Diagnostic struct {
-	LineIndex, TokenIndex int
-	Message               string
+	Line, Column int
+	Message      string
 }
 
 func (d Diagnostic) String() string {
-	return fmt.Sprintf("%d:%d: %s", d.LineIndex, d.TokenIndex, d.Message)
+	return fmt.Sprintf("%d:%d: %s", d.Line, d.Column, d.Message)
 }
 
 type Set map[string]struct{}
@@ -26,42 +26,35 @@ func ScanTokens(metainfo meta.Meta, inputs, operations Set, tokens tokenizer.Tok
 		inputs:     inputs,
 		operations: operations,
 		tokens:     tokens,
-		headers:    map[string]tokenPosition{},
+		headers:    map[string]tokenizer.Token{},
 	}
 	p.scanTokens()
 
 	sort.Slice(p.diagnostics, func(i, j int) bool {
-		if p.diagnostics[i].LineIndex < p.diagnostics[j].LineIndex {
+		if p.diagnostics[i].Line < p.diagnostics[j].Line {
 			return true
 		}
-		if p.diagnostics[i].LineIndex > p.diagnostics[j].LineIndex {
+		if p.diagnostics[i].Line > p.diagnostics[j].Line {
 			return false
 		}
-		return p.diagnostics[i].TokenIndex < p.diagnostics[j].TokenIndex
+		return p.diagnostics[i].Column < p.diagnostics[j].Column
 	})
 
 	return p.diagnostics
 }
 
-type tokenPosition struct {
-	lineIndex, tokenIndex int
-}
-
 type scanner struct {
-	metainfo          meta.Meta
-	inputs            Set
-	operations        Set
-	tokens            tokenizer.Tokens
-	headers           map[string]tokenPosition
-	diagnostics       []Diagnostic
-	state             state
-	header            []tokenizer.Token
-	body              []tokenizer.Token
-	previousTokenType tokenizer.TokenType
-	openParens        []tokenPosition
-	lineIndex         int
-	tokenIndex        int
-	token             tokenizer.Token
+	metainfo    meta.Meta
+	inputs      Set
+	operations  Set
+	tokens      tokenizer.Tokens
+	headers     map[string]tokenizer.Token
+	diagnostics []Diagnostic
+	state       state
+	header      []tokenizer.Token
+	body        []tokenizer.Token
+	openParens  tokenizer.Tokens
+	token       tokenizer.Token
 }
 
 type state int
@@ -72,10 +65,8 @@ const (
 )
 
 func (s *scanner) scanTokens() {
-	for s.lineIndex = range s.tokens {
-		for s.tokenIndex, s.token = range s.tokens[s.lineIndex] {
-			s.scanToken()
-		}
+	for _, s.token = range s.tokens {
+		s.scanToken()
 	}
 }
 
@@ -100,14 +91,13 @@ func (s *scanner) scanToken() {
 	default:
 		s.regularToken()
 	}
-	s.previousTokenType = s.token.Type
 }
 
 func (s *scanner) report(message string, args ...interface{}) {
 	s.diagnostics = append(s.diagnostics, Diagnostic{
-		LineIndex:  s.lineIndex,
-		TokenIndex: s.tokenIndex,
-		Message:    fmt.Sprintf(message, args...),
+		Line:    s.token.Line,
+		Column:  s.token.Column,
+		Message: fmt.Sprintf(message, args...),
 	})
 }
 
@@ -120,40 +110,41 @@ func (s *scanner) regularToken() {
 }
 
 func (s *scanner) headerToken() {
-	if s.token.Type != tokenizer.Identifier && s.token.Type != tokenizer.Variable && s.token.Type != tokenizer.InvalidToken {
+	if s.token.Type != tokenizer.CanonicalField && s.token.Type != tokenizer.Variable && s.token.Type != tokenizer.InvalidToken {
 		s.report("Rule header must be either canonical field or temporary variable")
 	}
 	if len(s.header) > 0 {
 		s.report("Rule header and body must be separated with '='")
 	}
-	if position, alreadyDefined := s.headers[s.token.Text]; alreadyDefined {
-		previousHeader := s.tokens[position.lineIndex][position.tokenIndex]
+	if previousHeader, alreadyDefined := s.headers[s.token.Text]; alreadyDefined {
 		s.report("Redefinition of %q previously defined at %d:%d",
-			s.token.Text, position.lineIndex, previousHeader.Column+1) // TODO: fix line
+			s.token.Text, previousHeader.Line+1, previousHeader.Column+1)
 	}
-	if s.token.Type == tokenizer.Identifier {
+	if s.token.Type == tokenizer.CanonicalField {
 		if s.metainfo.Type(s.token.Text) == meta.Invalid {
 			s.report("Canonical model does not have field %q", s.token.Text)
 		}
 	}
-	s.headers[s.token.Text] = tokenPosition{lineIndex: s.lineIndex, tokenIndex: s.tokenIndex}
+	s.headers[s.token.Text] = s.token
 	s.header = append(s.header, s.token)
 }
 
 func (s *scanner) bodyToken() {
-	if s.previousTokenType == tokenizer.OpenParen {
-		if _, defined := s.operations[s.token.Text]; s.token.Type != tokenizer.Identifier || !defined {
+	if s.token.Type == tokenizer.Operation {
+		if _, defined := s.operations[s.token.Text]; !defined {
 			s.report("Operation %q is not defined", s.token.Text)
 		}
-	} else {
-		if s.token.Type == tokenizer.Identifier {
-			if s.metainfo.Type(s.token.Text) == meta.Invalid {
-				s.report("Canonical model does not have field %q", s.token.Text)
-			}
-		} else if s.token.Type == tokenizer.Identifier || s.token.Type == tokenizer.Variable {
-			if _, defined := s.headers[s.token.Text]; !defined {
-				s.report("Field %q is not defined", s.token.Text)
-			}
+	}
+	if s.token.Type == tokenizer.CanonicalField {
+		if s.metainfo.Type(s.token.Text) == meta.Invalid {
+			s.report("Canonical model does not have field %q", s.token.Text)
+		} else if _, defined := s.headers[s.token.Text]; !defined {
+			s.report("Canonical field %q is not defined", s.token.Text)
+		}
+	}
+	if s.token.Type == tokenizer.Variable {
+		if _, defined := s.headers[s.token.Text]; !defined {
+			s.report("Variable %q is not defined", s.token.Text)
 		}
 	}
 	if s.token.Type == tokenizer.Input {
@@ -181,9 +172,9 @@ func (s *scanner) equalSign() {
 func (s *scanner) semicolon() {
 	for _, p := range s.openParens {
 		s.diagnostics = append(s.diagnostics, Diagnostic{
-			LineIndex:  p.lineIndex,
-			TokenIndex: p.tokenIndex,
-			Message:    fmt.Sprintf("Unbalanced '('"),
+			Line:    p.Line,
+			Column:  p.Column,
+			Message: fmt.Sprintf("Unbalanced '('"),
 		})
 	}
 	s.header = s.header[:0]
@@ -198,7 +189,7 @@ func (s *scanner) openParen() {
 		s.header = append(s.header, s.token)
 		return
 	}
-	s.openParens = append(s.openParens, tokenPosition{lineIndex: s.lineIndex, tokenIndex: s.tokenIndex})
+	s.openParens = append(s.openParens, s.token)
 	s.body = append(s.body, s.token)
 }
 

@@ -159,29 +159,27 @@ func (w *window) ensureCursorVisible() {
 
 func (w *window) showText() {
 	diagnosticsIndex := 0
-	for lineIndex, line := range w.tokens {
-		for tokenIndex, token := range line {
-			var d *diagnostics.Diagnostic
-			if diagnosticsIndex < len(w.diagnostics) &&
-				w.diagnostics[diagnosticsIndex].LineIndex == lineIndex &&
-				w.diagnostics[diagnosticsIndex].TokenIndex == tokenIndex {
-				d = &w.diagnostics[diagnosticsIndex]
-				diagnosticsIndex++
-			}
-			w.showToken(token, lineIndex, d)
+	for _, token := range w.tokens {
+		var d *diagnostics.Diagnostic
+		if diagnosticsIndex < len(w.diagnostics) &&
+			w.diagnostics[diagnosticsIndex].Line == token.Line &&
+			w.diagnostics[diagnosticsIndex].Column == token.Column {
+			d = &w.diagnostics[diagnosticsIndex]
+			diagnosticsIndex++
 		}
+		w.showToken(token, d)
 	}
 }
 
-func (w *window) showToken(token tokenizer.Token, tokenLine int, diagnosticMessage *diagnostics.Diagnostic) {
-	if tokenLine < w.lineOffset || tokenLine >= w.lineOffset+w.mainView.Height() {
+func (w *window) showToken(token tokenizer.Token, diagnosticMessage *diagnostics.Diagnostic) {
+	if token.Line < w.lineOffset || token.Line >= w.lineOffset+w.mainView.Height() {
 		return
 	}
 	tokenStyle := mainStyle
 	switch token.Type {
-	case tokenizer.Identifier:
+	case tokenizer.CanonicalField:
 		tokenStyle = tokenStyle.Foreground(tcell.ColorWhite).Bold(true)
-	case tokenizer.Variable:
+	case tokenizer.Variable, tokenizer.Operation:
 		tokenStyle = tokenStyle.Foreground(tcell.ColorWhite)
 	case tokenizer.Label:
 		tokenStyle = tokenStyle.Foreground(tcell.NewHexColor(0x8fffff))
@@ -215,7 +213,7 @@ func (w *window) showToken(token tokenizer.Token, tokenLine int, diagnosticMessa
 		tokenStyle = tokenStyle.Foreground(tcell.ColorRed).Bold(true).Bold(true)
 	}
 
-	w.mainView.SetText(token.Text, token.Column, tokenLine, tokenStyle)
+	w.mainView.SetText(token.Text, token.Column, token.Line, tokenStyle)
 }
 
 func (w *window) showLineNumbers() {
@@ -234,12 +232,11 @@ func (w *window) showDiagnostics() {
 	reportLine := 0
 	w.diagnosticViewPointers = []point{}
 	for _, d := range w.diagnostics {
-		token := w.tokens[d.LineIndex][d.TokenIndex]
-		message := fmt.Sprintf("%d:%d %s", d.LineIndex+1, token.Column+1, d.Message)
+		message := fmt.Sprintf("%d:%d %s", d.Line+1, d.Column+1, d.Message)
 		lines := wrapLines(message, w.diagnosticView.Width())
 		for _, line := range lines {
 			w.diagnosticView.SetText(line, 0, reportLine, mainStyle)
-			w.diagnosticViewPointers = append(w.diagnosticViewPointers, point{token.Column, d.LineIndex})
+			w.diagnosticViewPointers = append(w.diagnosticViewPointers, point{d.Column, d.Line})
 			reportLine++
 		}
 	}
@@ -336,25 +333,23 @@ func (w *window) handleEvent(ev tcell.Event) bool {
 		} else if ev.Key() == tcell.KeyCtrlP {
 			for i := len(w.diagnostics) - 1; i >= 0; i-- {
 				d := w.diagnostics[i]
-				if d.LineIndex > w.cursorY {
+				if d.Line > w.cursorY {
 					continue
 				}
-				token := w.tokens[d.LineIndex][d.TokenIndex]
-				if d.LineIndex < w.cursorY || token.Column < w.cursorX {
-					w.cursorX = token.Column
-					w.cursorY = d.LineIndex
+				if d.Line < w.cursorY || d.Column < w.cursorX {
+					w.cursorX = d.Column
+					w.cursorY = d.Line
 					break
 				}
 			}
 		} else if ev.Key() == tcell.KeyCtrlN {
 			for _, d := range w.diagnostics {
-				if d.LineIndex < w.cursorY {
+				if d.Line < w.cursorY {
 					continue
 				}
-				token := w.tokens[d.LineIndex][d.TokenIndex]
-				if d.LineIndex > w.cursorY || token.Column > w.cursorX {
-					w.cursorX = token.Column
-					w.cursorY = d.LineIndex
+				if d.Line > w.cursorY || d.Column > w.cursorX {
+					w.cursorX = d.Column
+					w.cursorY = d.Line
 					break
 				}
 			}
