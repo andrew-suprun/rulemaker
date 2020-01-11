@@ -128,9 +128,10 @@ func (c *content) JoinLines(lineOffset int) int {
 		return 0
 	}
 	line := c.runes[lineOffset-1]
+	result := len(line)
 	line = append(line, c.runes[lineOffset]...)
-	result := append(c.runes[:lineOffset-1], line)
-	result = append(result, c.runes[lineOffset+1:]...)
-	c.runes = result
-	return len(line)
+	runes := append(c.runes[:lineOffset-1], line)
+	runes = append(runes, c.runes[lineOffset+1:]...)
+	c.runes = runes
+	return result
 }

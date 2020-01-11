@@ -132,8 +132,8 @@ func (p *parser) scanRule(rule tokenizer.Tokens) {
 		}
 	}
 	for _, token := range rule {
-		if token.Type != tokenizer.Comment && token.Type != tokenizer.Semicolon {
-			p.report(rule[0], "Incomplete rule")
+		if token.Type != tokenizer.Comment {
+			p.report(token, "Incomplete rule")
 			return
 		}
 	}
@@ -252,7 +252,7 @@ func (p *parser) Diagnostics() []Diagnostic {
 	return p.diagnostics
 }
 
-func (p *parser) Completions(line, column int) []string {
+func (p *parser) Completions(column, line int) []string {
 	var header bool
 	var prefix string
 	var tokenType tokenizer.TokenType

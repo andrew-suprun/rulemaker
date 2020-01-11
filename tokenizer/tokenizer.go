@@ -27,7 +27,7 @@ type Token struct {
 }
 
 func (t Token) String() string {
-	return fmt.Sprintf("<%s %q column=%d:%d value=%v>", t.Type, t.Text, t.Line, t.Column, t.Value)
+	return fmt.Sprintf("<%s %q %d:%d value=%v>", t.Type, t.Text, t.Line, t.Column, t.Value)
 }
 
 type TokenType int
