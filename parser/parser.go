@@ -13,6 +13,7 @@ import (
 type Parser interface {
 	Parse(tokens tokenizer.Tokens)
 	Diagnostics() []Diagnostic
+	Completions(line, column int) []string
 }
 
 type Diagnostic struct {
@@ -249,4 +250,61 @@ func (p *parser) report(token tokenizer.Token, message string, args ...interface
 
 func (p *parser) Diagnostics() []Diagnostic {
 	return p.diagnostics
+}
+
+func (p *parser) Completions(line, column int) []string {
+	var header bool
+	var prefix string
+	var tokenType tokenizer.TokenType
+outer:
+	for i := range p.ruleStarts[:len(p.ruleStarts)-1] {
+		header = true
+		for _, token := range p.tokens[p.ruleStarts[i]:p.ruleStarts[i+1]] {
+			if token.Type == tokenizer.EqualSign {
+				header = false
+			}
+			if line == token.Line && column >= token.Column && column <= token.Column+len(token.Text) {
+				if token.Type == tokenizer.EqualSign && column == token.Column {
+					header = true
+				}
+				prefix = token.Text[:column-token.Column]
+				tokenType = token.Type
+				break outer
+			}
+			if line < token.Line || (line == token.Line && column < token.Column) {
+				break outer
+			}
+		}
+	}
+	if prefix == "" {
+		tokenType = tokenizer.CanonicalField
+	}
+
+	switch tokenType {
+	case tokenizer.CanonicalField:
+		set := model.Set{}
+		for name := range p.metainfo {
+			set[name] = struct{}{}
+		}
+		if header {
+			for name := range p.headers {
+				delete(set, name)
+			}
+		}
+		if len(prefix) > 0 {
+			for name := range set {
+				if !strings.HasPrefix(name, prefix) {
+					delete(set, name)
+				}
+			}
+		}
+		names := make([]string, 0, len(set))
+		for name := range set {
+			names = append(names, name)
+		}
+		sort.Strings(names)
+		return names
+	}
+
+	return nil
 }

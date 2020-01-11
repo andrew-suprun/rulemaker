@@ -57,16 +57,17 @@ type window struct {
 
 	parser parser.Parser
 
-	screen        tcell.Screen
-	width, height int
-	vSplit        int
+	screen         tcell.Screen
+	width, height  int
+	vSplit, hSplit int
 
 	titleView      view.View
 	menuView       view.View
-	statusView     view.View
 	mainView       view.View
 	lineNumberView view.View
 	diagnosticView view.View
+	completionView view.View
+	statusView     view.View
 
 	tokens      tokenizer.Tokens
 	diagnostics []parser.Diagnostic
@@ -89,6 +90,7 @@ func (w *window) resize() {
 	if w.width < 128 {
 		w.vSplit = w.width / 2
 	}
+	w.hSplit = w.height / 2
 	lineNumberViewWidth := 2
 	l := len(w.content.Runes())
 	for l > 0 {
@@ -100,7 +102,8 @@ func (w *window) resize() {
 	w.menuView = view.NewView(w.screen, 0, w.width, 1, 2)
 	w.lineNumberView = view.NewView(w.screen, 0, lineNumberViewWidth, 2, w.height-1)
 	w.mainView = view.NewView(w.screen, lineNumberViewWidth, w.vSplit, 2, w.height-1)
-	w.diagnosticView = view.NewView(w.screen, w.vSplit+1, w.width, 2, w.height-1)
+	w.diagnosticView = view.NewView(w.screen, w.vSplit+1, w.width, w.hSplit+1, w.height-1)
+	w.completionView = view.NewView(w.screen, w.vSplit+1, w.width, 2, w.hSplit)
 	w.statusView = view.NewView(w.screen, 0, w.width, w.height-1, w.height)
 }
 
@@ -111,10 +114,16 @@ func (w *window) clear() {
 	w.lineNumberView.Clear(lineNumberStyle)
 	w.mainView.Clear(mainStyle)
 	w.diagnosticView.Clear(mainStyle)
+	w.completionView.Clear(mainStyle)
 	w.statusView.Clear(menuStyle)
 
 	for row := 2; row < w.height-1; row++ {
 		w.screen.SetContent(w.vSplit, row, tcell.RuneVLine, nil, mainStyle)
+	}
+
+	w.screen.SetContent(w.vSplit, w.hSplit, tcell.RuneLTee, nil, mainStyle)
+	for col := w.vSplit + 1; col < w.width; col++ {
+		w.screen.SetContent(col, w.hSplit, tcell.RuneHLine, nil, mainStyle)
 	}
 
 	w.titleView.SetText("Rule Maker", 1, 0, defStyle.Bold(true))
@@ -136,6 +145,7 @@ func (w *window) draw() {
 	w.showText()
 	w.showLineNumbers()
 	w.showDiagnostics()
+	w.showCompletions()
 	w.showStatus()
 	w.screen.Show()
 }
@@ -240,6 +250,13 @@ func (w *window) showDiagnostics() {
 	}
 }
 
+func (w *window) showCompletions() {
+	names := w.parser.Completions(w.cursorY, w.cursorX)
+	for i, name := range names {
+		w.completionView.SetText(name, 0, i, mainStyle)
+	}
+}
+
 func wrapLines(str string, w int) (result []string) {
 	if len(str) <= w {
 		return []string{str}
@@ -262,15 +279,18 @@ func (w *window) showStatus() {
 }
 
 func (w *window) Run() {
-	for w.handleEvent(w.screen.PollEvent()) {
+	for w.handleEvent() {
 		w.draw()
 	}
 }
 
-func (w *window) handleEvent(ev tcell.Event) bool {
-	if w.cursorX < 0 || w.cursorY < 0 {
-		w.screen.Fini()
-		return false
+func (w *window) handleEvent() bool {
+	ev := w.screen.PollEvent()
+	for {
+		if ev, mouseEvent := ev.(*tcell.EventMouse); !mouseEvent || ev.Buttons() != 0 {
+			break
+		}
+		ev = w.screen.PollEvent()
 	}
 	switch ev := ev.(type) {
 	case *tcell.EventResize:
@@ -351,6 +371,7 @@ func (w *window) handleEvent(ev tcell.Event) bool {
 					break
 				}
 			}
+		} else if ev.Key() == tcell.KeyTab {
 		} else if ev.Key() == tcell.KeyCtrlQ {
 			w.screen.Fini()
 			return false
@@ -368,9 +389,11 @@ func (w *window) handleEvent(ev tcell.Event) bool {
 				w.ensureCursorVisible()
 			} else if w.diagnosticView.Contains(x, y) {
 				_, lineNum := w.diagnosticView.CursorFromPhysicalCoordinates(x, y)
-				p := w.diagnosticViewPointers[lineNum]
-				w.cursorX = p.x
-				w.cursorY = p.y
+				if lineNum < len(w.diagnosticViewPointers) {
+					p := w.diagnosticViewPointers[lineNum]
+					w.cursorX = p.x
+					w.cursorY = p.y
+				}
 			}
 			w.ensureCursorVisible()
 		}

@@ -113,8 +113,8 @@ func (c *content) SplitLine(lineOffset, runeOffset int) {
 	if runeOffset > len(line) {
 		runeOffset = len(line)
 	}
-	line1 := line[:runeOffset]
-	line2 := line[runeOffset:]
+	line1 := append([]rune{}, line[:runeOffset]...)
+	line2 := append([]rune{}, line[runeOffset:]...)
 	result := make([][]rune, 0, 0)
 	result = append(result, c.runes[:lineOffset]...)
 	result = append(result, line1)
