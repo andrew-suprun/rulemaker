@@ -13,6 +13,7 @@ type View interface {
 	Clear()
 	Cursor() (column, line int)
 	SetCursor(column, line int)
+	MoveCursor(column, line int)
 	Offsets() (column, line int)
 	SetOffsets(column, line int)
 	ShowCursor()
@@ -93,6 +94,11 @@ func (v *view) SetCursor(column, line int) {
 	if v.lineOffset <= v.cursorLine-v.height {
 		v.lineOffset = v.cursorLine - v.height + 1
 	}
+}
+
+func (v *view) MoveCursor(column, line int) {
+	c, l := v.Cursor()
+	v.SetCursor(column+c, line+l)
 }
 
 func (v *view) Offsets() (column, line int) {

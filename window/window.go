@@ -284,6 +284,9 @@ func (w *window) handleEvent() bool {
 		if ev.Key() == tcell.KeyRune {
 			w.content.InsertRune(line, column, ev.Rune())
 			w.mainView.SetCursor(column+1, line)
+			if ev.Rune() == '(' {
+				w.content.InsertRune(line, column+1, ')')
+			}
 		} else if ev.Key() == tcell.KeyBackspace || ev.Key() == tcell.KeyBackspace2 {
 			if column > 0 {
 				w.mainView.SetCursor(column-1, line)
@@ -298,13 +301,13 @@ func (w *window) handleEvent() bool {
 			w.content.SplitLine(line, column)
 			w.mainView.SetCursor(0, line+1)
 		} else if ev.Key() == tcell.KeyLeft {
-			w.mainView.SetCursor(column-1, line)
+			w.mainView.MoveCursor(-1, 0)
 		} else if ev.Key() == tcell.KeyRight {
-			w.mainView.SetCursor(column+1, line)
+			w.mainView.MoveCursor(1, 0)
 		} else if ev.Key() == tcell.KeyUp {
-			w.mainView.SetCursor(column, line-1)
+			w.mainView.MoveCursor(0, -1)
 		} else if ev.Key() == tcell.KeyDown {
-			w.mainView.SetCursor(column, line+1)
+			w.mainView.MoveCursor(0, 1)
 		} else if ev.Key() == tcell.KeyHome {
 			w.mainView.SetCursor(0, line)
 		} else if ev.Key() == tcell.KeyEnd {
@@ -357,6 +360,12 @@ func (w *window) handleEvent() bool {
 					p := w.diagnosticsViewPointers[lineNum]
 					w.mainView.SetCursor(p.x, p.y)
 				}
+			} else if w.completionsView.Contains(x, y) {
+				_, lineNum := w.completionsView.CursorFromScreenCoordinates(x, y)
+				text := w.parser.Completion(lineNum)
+				col, line := w.mainView.Cursor()
+				w.content.InsertRunes(line, col, []rune(text))
+				w.mainView.MoveCursor(len(text), 0)
 			}
 			w.mainView.ShowCursor()
 		}

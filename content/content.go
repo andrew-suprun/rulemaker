@@ -73,6 +73,10 @@ func (c *content) RemoveLines(lineOffset, numLines int) {
 }
 
 func (c *content) InsertRune(lineOffset, runeOffset int, ch rune) {
+	c.InsertRunes(lineOffset, runeOffset, []rune{ch})
+}
+
+func (c *content) InsertRunes(lineOffset, runeOffset int, runes []rune) {
 	for len(c.runes) <= lineOffset {
 		c.runes = append(c.runes, nil)
 	}
@@ -80,13 +84,9 @@ func (c *content) InsertRune(lineOffset, runeOffset int, ch rune) {
 	for len(line) <= runeOffset {
 		line = append(line, ' ')
 	}
-	rightPart := append([]rune{ch}, line[runeOffset:]...)
+	rightPart := append(runes, line[runeOffset:]...)
 	line = append(line[:runeOffset], rightPart...)
 	c.runes[lineOffset] = line
-}
-
-func (c *content) InsertRunes(lineOffset, runeOffset int, runes []rune) {
-	// TODO
 }
 
 func (c *content) RemoveRunes(lineOffset, runeOffset, numRunes int) {

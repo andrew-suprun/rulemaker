@@ -14,6 +14,7 @@ type Parser interface {
 	Parse(tokens tokenizer.Tokens)
 	Diagnostics() []Diagnostic
 	Completions(line, column int) []string
+	Completion(lineNum int) string
 }
 
 type Diagnostic struct {
@@ -43,6 +44,9 @@ type parser struct {
 	diagnostics []Diagnostic
 	headers     map[string]tokenizer.Token
 	openParens  tokenizer.Tokens
+
+	completions []string
+	prefix      string
 }
 
 func (p *parser) Parse(tokens tokenizer.Tokens) {
@@ -275,5 +279,14 @@ outer:
 		names = append(names, name)
 	}
 	sort.Strings(names)
+	p.completions = names
+	p.prefix = prefix
 	return names
+}
+
+func (p *parser) Completion(lineNum int) string {
+	if lineNum < len(p.completions) {
+		return p.completions[lineNum][len(p.prefix):]
+	}
+	return ""
 }
