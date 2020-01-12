@@ -88,6 +88,9 @@ func (v *view) SetCursor(column, line int) {
 	if v.cursorLine < 0 {
 		v.cursorLine = 0
 	}
+	if v.cursorLine >= v.totalLines {
+		v.cursorLine = v.totalLines - 1
+	}
 	if v.lineOffset > v.cursorLine {
 		v.lineOffset = v.cursorLine
 	}
@@ -172,8 +175,10 @@ func (v *view) Scroll(lines int) {
 
 func (v *view) PageUp() {
 	v.Scroll(-v.height)
+	v.MoveCursor(0, -v.height)
 }
 
 func (v *view) PageDown() {
 	v.Scroll(v.height)
+	v.MoveCursor(0, v.height)
 }
