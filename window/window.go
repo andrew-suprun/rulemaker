@@ -44,7 +44,6 @@ func NewWindow(c content.Content, metainfo meta.Meta, inputs, operations model.S
 	w.completionsView = view.NewView(w.screen, mainStyle)
 	w.statusView = view.NewView(w.screen, menuStyle)
 
-	w.draw()
 	return w, nil
 }
 
@@ -78,9 +77,7 @@ type window struct {
 	completionsView view.View
 	statusView      view.View
 
-	tokens      tokenizer.Tokens
-	diagnostics []parser.Diagnostic
-
+	tokens                  tokenizer.Tokens
 	diagnosticsViewPointers []point
 }
 
@@ -140,7 +137,6 @@ func (w *window) draw() {
 	w.clear()
 	w.tokens = tokenizer.Tokenize(w.content.Runes())
 	w.parser.Parse(w.tokens)
-	w.diagnostics = w.parser.Diagnostics()
 	w.showText()
 	w.showLineNumbers()
 	w.showDiagnostics()
@@ -151,16 +147,18 @@ func (w *window) draw() {
 
 func (w *window) showText() {
 	diagnosticsIndex := 0
+	diagnostics := w.parser.Diagnostics()
 	for _, token := range w.tokens {
 		var d *parser.Diagnostic
-		if diagnosticsIndex < len(w.diagnostics) &&
-			w.diagnostics[diagnosticsIndex].Line == token.Line &&
-			w.diagnostics[diagnosticsIndex].Column == token.Column {
-			d = &w.diagnostics[diagnosticsIndex]
+		if diagnosticsIndex < len(diagnostics) &&
+			diagnostics[diagnosticsIndex].Line == token.Line &&
+			diagnostics[diagnosticsIndex].Column == token.Column {
+			d = &diagnostics[diagnosticsIndex]
 			diagnosticsIndex++
 		}
 		w.showToken(token, d)
 	}
+	w.mainView.ShowCursor()
 }
 
 func (w *window) showToken(token tokenizer.Token, diagnosticMessage *parser.Diagnostic) {
@@ -225,7 +223,7 @@ func (w *window) showLineNumbers() {
 func (w *window) showDiagnostics() {
 	reportLine := 0
 	w.diagnosticsViewPointers = []point{}
-	for _, d := range w.diagnostics {
+	for _, d := range w.parser.Diagnostics() {
 		message := fmt.Sprintf("%d:%d %s", d.Line+1, d.Column+1, d.Message)
 		lines := wrapLines(message, w.diagnosticsView.Width())
 		for _, line := range lines {
@@ -319,8 +317,8 @@ func (w *window) handleEvent() bool {
 		} else if ev.Key() == tcell.KeyPgDn {
 			w.mainView.PageDown()
 		} else if ev.Key() == tcell.KeyCtrlP {
-			for i := len(w.diagnostics) - 1; i >= 0; i-- {
-				d := w.diagnostics[i]
+			for i := len(w.parser.Diagnostics()) - 1; i >= 0; i-- {
+				d := w.parser.Diagnostics()[i]
 				if d.Line > line {
 					continue
 				}
@@ -330,7 +328,7 @@ func (w *window) handleEvent() bool {
 				}
 			}
 		} else if ev.Key() == tcell.KeyCtrlN {
-			for _, d := range w.diagnostics {
+			for _, d := range w.parser.Diagnostics() {
 				if d.Line < line {
 					continue
 				}

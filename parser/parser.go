@@ -219,6 +219,7 @@ func (p *parser) Completions(column, line int) []string {
 	var header bool
 	var prefix string
 	var headerToken tokenizer.Token
+	var previousToken tokenizer.Token
 	var currentToken tokenizer.Token
 outer:
 	for i := range p.ruleStarts[:len(p.ruleStarts)-1] {
@@ -238,32 +239,42 @@ outer:
 				currentToken = token
 				break outer
 			}
+			previousToken = token
 		}
 	}
 
 	set := model.Set{}
-	switch currentToken.Type {
-	case tokenizer.CanonicalField, tokenizer.Variable, tokenizer.InvalidToken:
-		if header {
-			for name := range p.metainfo {
-				set[name] = struct{}{}
-			}
-			for name := range p.headers {
-				delete(set, name)
-			}
-		} else {
-			for name, token := range p.headers {
-				if token.Line < headerToken.Line || (token.Line == headerToken.Line && token.Column < headerToken.Column) {
-					if strings.HasPrefix(prefix, "_") || p.metainfo.Type(token.Text) != meta.Invalid {
-						set[name] = struct{}{}
+	if previousToken.Type == tokenizer.OpenParen || currentToken.Type == tokenizer.OpenParen {
+		if prefix == "(" {
+			prefix = ""
+		}
+		for op := range p.operations {
+			set[op] = struct{}{}
+		}
+	} else {
+		switch currentToken.Type {
+		case tokenizer.CanonicalField, tokenizer.Variable, tokenizer.InvalidToken:
+			if header {
+				for name := range p.metainfo {
+					set[name] = struct{}{}
+				}
+				for name := range p.headers {
+					delete(set, name)
+				}
+			} else {
+				for name, token := range p.headers {
+					if token.Line < headerToken.Line || (token.Line == headerToken.Line && token.Column < headerToken.Column) {
+						if strings.HasPrefix(prefix, "_") || p.metainfo.Type(token.Text) != meta.Invalid {
+							set[name] = struct{}{}
+						}
 					}
 				}
+				delete(set, headerToken.Text)
 			}
-			delete(set, headerToken.Text)
-		}
-	case tokenizer.Input:
-		for input := range p.inputs {
-			set["$"+input] = struct{}{}
+		case tokenizer.Input:
+			for input := range p.inputs {
+				set["$"+input] = struct{}{}
+			}
 		}
 	}
 	if len(prefix) > 0 {
