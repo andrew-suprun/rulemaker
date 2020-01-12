@@ -95,7 +95,7 @@ func (p *parser) scanRule(rule tokenizer.Tokens) {
 		}
 	}
 	for _, token := range rule {
-		if token.Type != tokenizer.Comment {
+		if token.Type != tokenizer.Comment && token.Type != tokenizer.Semicolon {
 			p.report(token, "Incomplete rule")
 			return
 		}
@@ -216,44 +216,21 @@ func (p *parser) Diagnostics() []Diagnostic {
 }
 
 func (p *parser) Completions(column, line int) []string {
-	var header bool
-	var prefix string
-	var headerToken tokenizer.Token
-	var previousToken tokenizer.Token
-	var currentToken tokenizer.Token
-outer:
-	for i := range p.ruleStarts[:len(p.ruleStarts)-1] {
-		header = true
-		for _, token := range p.tokens[p.ruleStarts[i]:p.ruleStarts[i+1]] {
-			if line < token.Line || (line == token.Line && column <= token.Column) {
-				break outer
-			}
-			if token.Type == tokenizer.EqualSign {
-				header = false
-			}
-			if header && (token.Type == tokenizer.CanonicalField || token.Type == tokenizer.Variable) {
-				headerToken = token
-			}
-			if line == token.Line && column > token.Column && column <= token.Column+len(token.Text) {
-				prefix = token.Text[:column-token.Column]
-				currentToken = token
-				break outer
-			}
-			previousToken = token
-		}
+	prefix, expectedType, header := "", tokenizer.CanonicalField, true
+	rule, found := p.findRule(column, line)
+	if !found {
+		return []string{}
 	}
+	prefix, expectedType, header = p.findPrefix(column, line, rule)
 
 	set := model.Set{}
-	if previousToken.Type == tokenizer.OpenParen || currentToken.Type == tokenizer.OpenParen {
-		if prefix == "(" {
-			prefix = ""
-		}
+	if expectedType == tokenizer.Operation {
 		for op := range p.operations {
 			set[op] = struct{}{}
 		}
 	} else {
-		switch currentToken.Type {
-		case tokenizer.CanonicalField, tokenizer.Variable, tokenizer.InvalidToken:
+		switch expectedType {
+		case tokenizer.CanonicalField, tokenizer.Variable:
 			if header {
 				for name := range p.metainfo {
 					set[name] = struct{}{}
@@ -262,14 +239,15 @@ outer:
 					delete(set, name)
 				}
 			} else {
+				ruleStartColumn := rule[0].Column
+				ruleStartLine := rule[0].Line
 				for name, token := range p.headers {
-					if token.Line < headerToken.Line || (token.Line == headerToken.Line && token.Column < headerToken.Column) {
+					if token.Line < ruleStartLine || (token.Line == ruleStartLine && token.Column < ruleStartColumn) {
 						if strings.HasPrefix(prefix, "_") || p.metainfo.Type(token.Text) != meta.Invalid {
 							set[name] = struct{}{}
 						}
 					}
 				}
-				delete(set, headerToken.Text)
 			}
 		case tokenizer.Input:
 			for input := range p.inputs {
@@ -293,6 +271,71 @@ outer:
 	p.completions = names
 	p.prefix = prefix
 	return names
+}
+
+func (p *parser) findRule(column, line int) (rule tokenizer.Tokens, found bool) {
+	for i := range p.ruleStarts[:len(p.ruleStarts)-1] {
+		rule = p.tokens[p.ruleStarts[i]:p.ruleStarts[i+1]]
+		lastRuleToken := rule[len(rule)-1]
+		if line < lastRuleToken.Line || (line == lastRuleToken.Line && column <= lastRuleToken.Column) {
+			return rule, true
+		}
+	}
+	return tokenizer.Tokens{}, false
+}
+
+func (p *parser) findPrefix(column, line int, rule tokenizer.Tokens) (prefix string, expectedType tokenizer.TokenType, inHeader bool) {
+	index := 0
+	for index = range rule {
+		if rule[index].Type == tokenizer.EqualSign {
+			break
+		}
+	}
+	header := rule[:index]
+	body := rule[index+1:]
+	if line < rule[index].Line || (line == rule[index].Line && column <= rule[index].Column) {
+		prefix, expectedType = p.findPrefixInHeader(column, line, header)
+		return prefix, expectedType, true
+	}
+	prefix, expectedType = p.findPrefixInBody(column, line, body)
+	return prefix, expectedType, false
+}
+
+func (p *parser) findPrefixInHeader(column, line int, header tokenizer.Tokens) (prefix string, expectedType tokenizer.TokenType) {
+	for _, token := range header {
+		if token.Type == tokenizer.Comment {
+			continue
+		}
+		if line < token.Line || (line == token.Line && column <= token.Column) {
+			return "", tokenizer.CanonicalField
+		}
+		if token.Type != tokenizer.CanonicalField && token.Type != tokenizer.Variable {
+			return "", tokenizer.InvalidToken
+		}
+		if line == token.Line && column > token.Column && column <= token.Column+len(token.Text) {
+			return token.Text[:column-token.Column], token.Type
+		}
+		break
+	}
+	return "", tokenizer.InvalidToken
+}
+
+func (p *parser) findPrefixInBody(column, line int, body tokenizer.Tokens) (prefix string, expectedType tokenizer.TokenType) {
+	for _, token := range body {
+		if line < token.Line || (line == token.Line && column <= token.Column) {
+			break
+		}
+		if line > token.Line || (line == token.Line && column > token.Column+len(token.Text)) {
+			continue
+		}
+		if token.Type == tokenizer.OpenParen {
+			return "", tokenizer.Operation
+		}
+		if line == token.Line && column > token.Column {
+			return token.Text[:column-token.Column], token.Type
+		}
+	}
+	return "", tokenizer.CanonicalField
 }
 
 func (p *parser) Completion(lineNum int) string {

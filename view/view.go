@@ -88,8 +88,8 @@ func (v *view) SetCursor(column, line int) {
 	if v.cursorLine < 0 {
 		v.cursorLine = 0
 	}
-	if v.cursorLine >= v.totalLines {
-		v.cursorLine = v.totalLines - 1
+	if v.cursorLine > v.totalLines {
+		v.cursorLine = v.totalLines
 	}
 	if v.lineOffset > v.cursorLine {
 		v.lineOffset = v.cursorLine
