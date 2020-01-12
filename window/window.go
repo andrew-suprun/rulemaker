@@ -257,7 +257,7 @@ func wrapLines(str string, w int) (result []string) {
 
 func (w *window) showStatus() {
 	column, line := w.mainView.Cursor()
-	w.statusView.SetText(fmt.Sprintf("%s %d:%d", w.content.Path(), line, column), 1, 0, menuStyle)
+	w.statusView.SetText(fmt.Sprintf("%s %d:%d", w.content.Path(), line+1, column+1), 1, 0, menuStyle)
 }
 
 func (w *window) Run() {
@@ -284,6 +284,9 @@ func (w *window) handleEvent() bool {
 			w.mainView.SetCursor(column+1, line)
 			if ev.Rune() == '(' {
 				w.content.InsertRune(line, column+1, ')')
+			}
+			if ev.Rune() == '"' {
+				w.content.InsertRune(line, column+1, '"')
 			}
 		} else if ev.Key() == tcell.KeyBackspace || ev.Key() == tcell.KeyBackspace2 {
 			if column > 0 {
@@ -338,6 +341,10 @@ func (w *window) handleEvent() bool {
 				}
 			}
 		} else if ev.Key() == tcell.KeyTab {
+			text := w.parser.Completion(0)
+			col, line := w.mainView.Cursor()
+			w.content.InsertRunes(line, col, []rune(text))
+			w.mainView.MoveCursor(len(text), 0)
 		} else if ev.Key() == tcell.KeyCtrlQ {
 			w.screen.Fini()
 			return false
