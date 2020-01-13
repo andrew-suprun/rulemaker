@@ -51,6 +51,7 @@ func (v *view) Clear() {
 			v.screen.SetContent(col+v.left, row+v.top, ' ', nil, v.style)
 		}
 	}
+	v.totalLines = 0
 }
 
 func (v *view) LineOffset() int {
