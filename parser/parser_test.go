@@ -38,7 +38,7 @@ type startsFixture struct {
 }
 
 var starts = []startsFixture{
-	{"# comment\n a #comment\n = #comment\n 123", []int{0, 6}},
+	{"# comment\n a #comment\n = #comment\n 123", []int{0, 1, 6}},
 	{"=", []int{0, 1}},
 	{"===", []int{0, 3}},
 	{"a = = d", []int{0, 4}},
@@ -114,9 +114,10 @@ var fixture = []struct {
 		{0, 16, "Input field \"$a\" is not defined"},
 	}},
 	{"foo = (((;", []Diagnostic{
-		{0, 6, "Unbalanced '('"},
-		{0, 7, "Unbalanced '('"},
+		{0, 6, "Missing operation"},
+		{0, 7, "Missing operation"},
 		{0, 8, "Unbalanced '('"},
+		{0, 9, "Missing operation"},
 	}},
 }
 

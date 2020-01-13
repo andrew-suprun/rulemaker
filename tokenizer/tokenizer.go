@@ -291,7 +291,9 @@ func (t *tokenizer) token(tokenType TokenType, startColumn int, value interface{
 		Text:   string(t.runes[startColumn:t.column]),
 		Value:  value,
 	})
-	t.lastTokenType = tokenType
+	if tokenType != Comment {
+		t.lastTokenType = tokenType
+	}
 }
 
 func (t *tokenizer) skipSpace() {

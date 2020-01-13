@@ -321,19 +321,26 @@ func (p *parser) findPrefixInHeader(column, line int, header tokenizer.Tokens) (
 }
 
 func (p *parser) findPrefixInBody(column, line int, body tokenizer.Tokens) (prefix string, expectedType tokenizer.TokenType) {
+	prevTokeType := tokenizer.InvalidToken
 	for _, token := range body {
 		if line < token.Line || (line == token.Line && column <= token.Column) {
 			break
 		}
 		if line > token.Line || (line == token.Line && column > token.Column+len(token.Text)) {
+			if token.Type != tokenizer.Comment {
+				prevTokeType = token.Type
+			}
 			continue
 		}
-		if token.Type == tokenizer.OpenParen {
-			return "", tokenizer.Operation
-		}
 		if line == token.Line && column > token.Column {
+			if token.Type == tokenizer.OpenParen {
+				return "", tokenizer.Operation
+			}
 			return token.Text[:column-token.Column], token.Type
 		}
+	}
+	if prevTokeType == tokenizer.OpenParen {
+		return "", tokenizer.Operation
 	}
 	return "", tokenizer.CanonicalField
 }
