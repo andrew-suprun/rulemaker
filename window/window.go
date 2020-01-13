@@ -34,13 +34,13 @@ func NewWindow(c content.Content, metainfo meta.Meta, inputs, operations model.S
 		menuStyle = defStyle.Background(tcell.ColorSilver)
 	} else if theme == DarkTheme {
 		mainStyle = tcell.StyleDefault.Foreground(tcell.ColorWhite).Background(tcell.ColorBlack)
-		lineNumberStyle = mainStyle.Foreground(tcell.ColorBlack).Background(tcell.ColorSilver)
-		lineNumberStyleCurrent = mainStyle.Foreground(tcell.ColorSilver).Background(tcell.ColorBlack)
+		lineNumberStyle = mainStyle.Foreground(tcell.ColorWhite).Background(tcell.ColorGray)
+		lineNumberStyleCurrent = mainStyle.Foreground(tcell.ColorWhite).Background(tcell.ColorSilver)
 		menuStyle = defStyle.Background(tcell.ColorSilver)
 	} else if theme == LightTheme {
 		mainStyle = defStyle
-		lineNumberStyle = mainStyle.Foreground(tcell.ColorSilver).Background(tcell.ColorBlack)
-		lineNumberStyleCurrent = mainStyle.Foreground(tcell.ColorBlack).Background(tcell.ColorWhite)
+		lineNumberStyle = mainStyle.Foreground(tcell.ColorWhite).Background(tcell.ColorGray)
+		lineNumberStyleCurrent = mainStyle.Foreground(tcell.ColorBlack).Background(tcell.ColorSilver)
 		menuStyle = defStyle.Background(tcell.ColorSilver)
 	}
 
@@ -207,7 +207,7 @@ func lightTextStyle(tokenType tokenizer.TokenType) tcell.Style {
 	case tokenizer.Label:
 		tokenStyle = tokenStyle.Foreground(tcell.NewHexColor(0x003f3f))
 	case tokenizer.Input:
-		tokenStyle = tokenStyle.Foreground(tcell.NewHexColor(0x003f00))
+		tokenStyle = tokenStyle.Foreground(tcell.NewHexColor(0x003f00)).Bold(true)
 	case tokenizer.OpenParen,
 		tokenizer.CloseParen,
 		tokenizer.EqualSign,
@@ -238,14 +238,14 @@ func lightTextStyle(tokenType tokenizer.TokenType) tcell.Style {
 func mainTextStyle(tokenType tokenizer.TokenType) tcell.Style {
 	tokenStyle := mainStyle
 	switch tokenType {
-	case tokenizer.CanonicalField:
+	case tokenizer.CanonicalField, tokenizer.Operation:
 		tokenStyle = tokenStyle.Foreground(tcell.ColorWhite).Bold(true)
-	case tokenizer.Variable, tokenizer.Operation:
+	case tokenizer.Variable:
 		tokenStyle = tokenStyle.Foreground(tcell.ColorWhite)
 	case tokenizer.Label:
 		tokenStyle = tokenStyle.Foreground(tcell.NewHexColor(0x8fffff))
 	case tokenizer.Input:
-		tokenStyle = tokenStyle.Foreground(tcell.NewHexColor(0x8fff8f))
+		tokenStyle = tokenStyle.Foreground(tcell.NewHexColor(0x8fff8f)).Bold(true)
 	case tokenizer.OpenParen,
 		tokenizer.CloseParen,
 		tokenizer.EqualSign,
