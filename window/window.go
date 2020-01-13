@@ -18,7 +18,32 @@ type Window interface {
 	Run()
 }
 
-func NewWindow(c content.Content, metainfo meta.Meta, inputs, operations model.Set) (Window, error) {
+type Theme int
+
+const (
+	BlueTheme Theme = iota
+	DarkTheme
+	LightTheme
+)
+
+func NewWindow(c content.Content, metainfo meta.Meta, inputs, operations model.Set, theme Theme) (Window, error) {
+	if theme == BlueTheme {
+		mainStyle = tcell.StyleDefault.Foreground(tcell.ColorWhite).Background(tcell.NewRGBColor(0, 0, 63))
+		lineNumberStyle = mainStyle.Foreground(tcell.ColorSilver).Background(tcell.ColorBlack)
+		lineNumberStyleCurrent = mainStyle.Foreground(tcell.ColorWhite).Background(tcell.ColorGrey)
+		menuStyle = defStyle.Background(tcell.ColorSilver)
+	} else if theme == DarkTheme {
+		mainStyle = tcell.StyleDefault.Foreground(tcell.ColorWhite).Background(tcell.ColorBlack)
+		lineNumberStyle = mainStyle.Foreground(tcell.ColorBlack).Background(tcell.ColorSilver)
+		lineNumberStyleCurrent = mainStyle.Foreground(tcell.ColorSilver).Background(tcell.ColorBlack)
+		menuStyle = defStyle.Background(tcell.ColorSilver)
+	} else if theme == LightTheme {
+		mainStyle = defStyle
+		lineNumberStyle = mainStyle.Foreground(tcell.ColorSilver).Background(tcell.ColorBlack)
+		lineNumberStyleCurrent = mainStyle.Foreground(tcell.ColorBlack).Background(tcell.ColorWhite)
+		menuStyle = defStyle.Background(tcell.ColorSilver)
+	}
+
 	screen, e := tcell.NewScreen()
 	if e != nil {
 		return nil, e
@@ -31,6 +56,7 @@ func NewWindow(c content.Content, metainfo meta.Meta, inputs, operations model.S
 	screen.Clear()
 
 	w := &window{
+		theme:   theme,
 		content: c,
 		parser:  parser.NewParser(metainfo, inputs, operations),
 		screen:  screen,
@@ -49,18 +75,13 @@ func NewWindow(c content.Content, metainfo meta.Meta, inputs, operations model.S
 
 var defStyle tcell.Style
 
-// var mainBackground = tcell.NewRGBColor(0, 0, 63)
-// var mainBackground = tcell.ColorBlack
-// var mainStyle = tcell.StyleDefault.Foreground(tcell.ColorWhite).Background(mainBackground)
-// var lineNumberStyle = mainStyle.Foreground(tcell.ColorBlack).Background(tcell.ColorSilver)
-// var menuStyle tcell.Style = defStyle.Background(tcell.ColorSilver)
-
 var mainStyle = tcell.StyleDefault.Foreground(tcell.ColorWhite).Background(tcell.NewRGBColor(0, 0, 63))
 var lineNumberStyle = mainStyle.Foreground(tcell.ColorSilver).Background(tcell.ColorBlack)
 var lineNumberStyleCurrent = mainStyle.Foreground(tcell.ColorBlack).Background(tcell.ColorSilver)
-var menuStyle tcell.Style = defStyle.Background(tcell.ColorSilver)
+var menuStyle = defStyle.Background(tcell.ColorSilver)
 
 type window struct {
+	theme   Theme
 	content content.Content
 
 	parser parser.Parser
@@ -162,8 +183,61 @@ func (w *window) showText() {
 }
 
 func (w *window) showToken(token tokenizer.Token, diagnosticMessage *parser.Diagnostic) {
+	tt := token.Type
+	if diagnosticMessage != nil {
+		tt = tokenizer.InvalidToken
+	}
+	var style tcell.Style
+	if w.theme == LightTheme {
+		style = lightTextStyle(tt)
+	} else {
+		style = mainTextStyle(tt)
+	}
+
+	w.mainView.SetText(token.Text, token.Column, token.Line, style)
+}
+
+func lightTextStyle(tokenType tokenizer.TokenType) tcell.Style {
 	tokenStyle := mainStyle
-	switch token.Type {
+	switch tokenType {
+	case tokenizer.CanonicalField, tokenizer.Operation:
+		tokenStyle = tokenStyle.Foreground(tcell.ColorBlack).Bold(true)
+	case tokenizer.Variable:
+		tokenStyle = tokenStyle.Foreground(tcell.ColorBlack)
+	case tokenizer.Label:
+		tokenStyle = tokenStyle.Foreground(tcell.NewHexColor(0x003f3f))
+	case tokenizer.Input:
+		tokenStyle = tokenStyle.Foreground(tcell.NewHexColor(0x003f00))
+	case tokenizer.OpenParen,
+		tokenizer.CloseParen,
+		tokenizer.EqualSign,
+		tokenizer.Semicolon:
+		tokenStyle = tokenStyle.Foreground(tcell.ColorBlack).Bold(true)
+	case tokenizer.Comment:
+		// tokenStyle = tokenStyle.Foreground(tcell.ColorGray)
+		tokenStyle = tokenStyle.Foreground(tcell.NewHexColor(0x3d3d3d))
+	case tokenizer.StringLiteral,
+		tokenizer.IntegerLiteral,
+		tokenizer.RealLiteral,
+		tokenizer.BooleanLiteral,
+		tokenizer.NilLiteral,
+		tokenizer.DateLiteral,
+		tokenizer.YearSpanLiteral,
+		tokenizer.MonthSpanLiteral,
+		tokenizer.DaySpanLiteral,
+		tokenizer.TodayLiteral:
+		// tokenStyle = tokenStyle.Foreground(tcell.NewHexColor(0xf0e68c))
+		tokenStyle = tokenStyle.Foreground(tcell.NewHexColor(0x3f3f00))
+	case tokenizer.InvalidToken:
+		// tokenStyle = tokenStyle.Foreground(tcell.NewHexColor(0xf0e68c))
+		tokenStyle = tokenStyle.Foreground(tcell.NewHexColor(0x7f0000)).Bold(true).Bold(true)
+	}
+	return tokenStyle
+}
+
+func mainTextStyle(tokenType tokenizer.TokenType) tcell.Style {
+	tokenStyle := mainStyle
+	switch tokenType {
 	case tokenizer.CanonicalField:
 		tokenStyle = tokenStyle.Foreground(tcell.ColorWhite).Bold(true)
 	case tokenizer.Variable, tokenizer.Operation:
@@ -196,11 +270,7 @@ func (w *window) showToken(token tokenizer.Token, diagnosticMessage *parser.Diag
 		// tokenStyle = tokenStyle.Foreground(tcell.NewHexColor(0xf0e68c))
 		tokenStyle = tokenStyle.Foreground(tcell.ColorRed).Bold(true).Bold(true)
 	}
-	if diagnosticMessage != nil {
-		tokenStyle = tokenStyle.Foreground(tcell.ColorRed).Bold(true).Bold(true)
-	}
-
-	w.mainView.SetText(token.Text, token.Column, token.Line, tokenStyle)
+	return tokenStyle
 }
 
 func (w *window) showLineNumbers() {
