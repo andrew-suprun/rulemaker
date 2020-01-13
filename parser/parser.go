@@ -64,12 +64,29 @@ func (p *parser) splitRules() {
 	p.ruleStarts = append(p.ruleStarts, nextStart)
 	for index, token := range p.tokens {
 		if token.Type == tokenizer.Semicolon {
+			p.splitRule(nextStart, index+1)
 			nextStart = index + 1
 			p.ruleStarts = append(p.ruleStarts, nextStart)
 		}
 	}
 	if nextStart != len(p.tokens) {
+		p.splitRule(nextStart, len(p.tokens))
 		p.ruleStarts = append(p.ruleStarts, len(p.tokens))
+	}
+}
+
+func (p *parser) splitRule(start, end int) {
+	index := start + 1
+	fieldIndex := -1
+	for ; index < end; index++ {
+		if p.tokens[index].Type == tokenizer.CanonicalField || p.tokens[index].Type == tokenizer.Variable {
+			fieldIndex = index
+		} else if p.tokens[index].Type == tokenizer.EqualSign && fieldIndex != -1 {
+			p.ruleStarts = append(p.ruleStarts, fieldIndex)
+			fieldIndex = -1
+		} else if p.tokens[index].Type != tokenizer.Comment {
+			fieldIndex = -1
+		}
 	}
 }
 
@@ -274,12 +291,13 @@ func (p *parser) Completions(column, line int) []string {
 }
 
 func (p *parser) findRule(column, line int) (rule tokenizer.Tokens, found bool) {
-	for i := range p.ruleStarts[:len(p.ruleStarts)-1] {
-		rule = p.tokens[p.ruleStarts[i]:p.ruleStarts[i+1]]
-		lastRuleToken := rule[len(rule)-1]
-		if line < lastRuleToken.Line || (line == lastRuleToken.Line && column <= lastRuleToken.Column) {
-			return rule, true
+	i := 1
+	for ; i < len(p.ruleStarts)-1; i++ {
+		token := p.tokens[p.ruleStarts[i]]
+		if line > token.Line || (line == token.Line && column >= token.Column) {
+			continue
 		}
+		return p.tokens[p.ruleStarts[i-1]:p.ruleStarts[i]], true
 	}
 	return tokenizer.Tokens{}, false
 }

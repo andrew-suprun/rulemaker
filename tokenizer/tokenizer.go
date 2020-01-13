@@ -302,7 +302,7 @@ func (t *tokenizer) skipSpace() {
 func (t *tokenizer) skipToSeparator() {
 	for ; t.column < len(t.runes); t.column++ {
 		ch := t.runes[t.column]
-		if ch == '(' || ch == ')' || ch == ';' || unicode.IsSpace(ch) {
+		if ch == '(' || ch == ')' || ch == ';' || ch == '"' || unicode.IsSpace(ch) {
 			return
 		}
 	}
