@@ -1,6 +1,7 @@
 package main
 
 import (
+	"flag"
 	"fmt"
 	"os"
 
@@ -11,7 +12,13 @@ import (
 	"league.com/rulemaker/window"
 )
 
+var (
+	lightFlag = flag.Bool("light", false, "Light theme")
+	darkFlag  = flag.Bool("dark", false, "Dark theme")
+)
+
 func main() {
+	flag.Parse()
 	metainfo := meta.Metainfo(canonical_model.EmployeeDTO{})
 
 	var inputs = model.Set{
@@ -94,7 +101,13 @@ func main() {
 		fmt.Fprintf(os.Stderr, "%v\n", e)
 		os.Exit(1)
 	}
-	w, e := window.NewWindow(c, metainfo, inputs, operations)
+	theme := window.BlueTheme
+	if *darkFlag {
+		theme = window.DarkTheme
+	} else if *lightFlag {
+		theme = window.LightTheme
+	}
+	w, e := window.NewWindow(c, metainfo, inputs, operations, theme)
 	if e != nil {
 		fmt.Fprintf(os.Stderr, "%v\n", e)
 		os.Exit(1)
