@@ -68,11 +68,11 @@ var mainStyles = map[tokenizer.TokenType]tcell.Style{
 }
 
 var lightStyles = map[tokenizer.TokenType]tcell.Style{
-	tokenizer.CanonicalField:   defStyle.Foreground(tcell.ColorBlack).Bold(true),
+	tokenizer.CanonicalField:   defStyle.Foreground(tcell.ColorBlack),
 	tokenizer.Operation:        defStyle.Foreground(tcell.Color18).Bold(true),
 	tokenizer.Variable:         defStyle.Foreground(tcell.ColorBlack),
 	tokenizer.Label:            defStyle.Foreground(tcell.NewHexColor(0x003f3f)),
-	tokenizer.Input:            defStyle.Foreground(tcell.ColorDarkGreen).Bold(true),
+	tokenizer.Input:            defStyle.Foreground(tcell.ColorDarkGreen),
 	tokenizer.OpenParen:        defStyle.Foreground(tcell.ColorBlack).Bold(true),
 	tokenizer.CloseParen:       defStyle.Foreground(tcell.ColorBlack).Bold(true),
 	tokenizer.EqualSign:        defStyle.Foreground(tcell.ColorBlack).Bold(true),
