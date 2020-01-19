@@ -405,7 +405,16 @@ func (p *Parser) completionsForBody(ruleIndex int, prefix string, tokenType toke
 
 	result = filterByPrefix(completions, prefix)
 	sort.Slice(result, func(i, j int) bool {
-		return result[i].Name[1:]+result[i].Name[:1] < result[j].Name[1:]+result[j].Name[:1]
+		one := result[i].Name
+		if one[0] == '$' || one[0] == '_' {
+			one = one[1:] + one[:1]
+		}
+		two := result[j].Name
+		if two[0] == '$' || two[0] == '_' {
+			two = two[1:] + two[:1]
+		}
+
+		return one < two
 	})
 	return result
 }
