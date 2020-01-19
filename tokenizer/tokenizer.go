@@ -4,30 +4,52 @@ import (
 	"bytes"
 	"fmt"
 	"strconv"
+	"strings"
 	"time"
 	"unicode"
 )
 
-func Tokenize(content [][]rune) Tokens {
+func TokenizeString(text string) Tokens {
+	lines := strings.Split(text, "\n")
+	runes := make([][]rune, len(lines))
+	for i, line := range lines {
+		runes[i] = []rune(line)
+	}
+	return TokenizeRunes(runes)
+}
+
+func TokenizeRunes(content [][]rune) Tokens {
 	t := &tokenizer{}
 	for line, runes := range content {
 		t.tokenizeLine(line, runes)
 	}
+	t.tokens = append(t.tokens, Token{Type: EndMarker})
 	return t.tokens
 }
 
 type Tokens []Token
 
 type Token struct {
-	Type   TokenType
+	Text   string
 	Line   int
 	Column int
-	Text   string
+	Type   TokenType
 	Value  interface{}
 }
 
 func (t Token) String() string {
 	return fmt.Sprintf("<%s %q %d:%d value=%v>", t.Type, t.Text, t.Line, t.Column, t.Value)
+}
+
+func (t Token) After(line, column int) bool {
+	return t.Line > line || (t.Line == line && t.Column > column)
+}
+
+func (t Token) Contains(line, column int) bool {
+	if t.Type == Comment {
+		return line == t.Line && column >= t.Column
+	}
+	return line == t.Line && (column >= t.Column && column < t.Column+len(t.Text))
 }
 
 type TokenType int
@@ -54,6 +76,7 @@ const (
 	OpenParen
 	CloseParen
 	Comment
+	EndMarker
 )
 
 func (t TokenType) String() string {
@@ -100,6 +123,8 @@ func (t TokenType) String() string {
 		return "CloseParen"
 	case Comment:
 		return "Comment"
+	case EndMarker:
+		return "EndMarker"
 	}
 	return "UnknownType"
 }
@@ -113,8 +138,8 @@ type tokenizer struct {
 }
 
 func (t *tokenizer) tokenizeLine(line int, runes []rune) {
-	t.line = line
 	t.runes = runes
+	t.line = line
 	t.column = 0
 	for {
 		t.skipSpace()
@@ -285,10 +310,10 @@ func (t *tokenizer) closeParen() {
 
 func (t *tokenizer) token(tokenType TokenType, startColumn int, value interface{}) {
 	t.tokens = append(t.tokens, Token{
-		Type:   tokenType,
+		Text:   string(t.runes[startColumn:t.column]),
 		Line:   t.line,
 		Column: startColumn,
-		Text:   string(t.runes[startColumn:t.column]),
+		Type:   tokenType,
 		Value:  value,
 	})
 	if tokenType != Comment {
@@ -304,7 +329,7 @@ func (t *tokenizer) skipSpace() {
 func (t *tokenizer) skipToSeparator() {
 	for ; t.column < len(t.runes); t.column++ {
 		ch := t.runes[t.column]
-		if ch == '(' || ch == ')' || ch == '"' || ch == ';' || unicode.IsSpace(ch) {
+		if ch == '(' || ch == ')' || ch == '"' || ch == ';' || ch == '#' || unicode.IsSpace(ch) {
 			return
 		}
 	}

@@ -4,182 +4,100 @@ import (
 	"github.com/gdamore/tcell"
 )
 
-type View interface {
-	Resize(left, right, top, bottom int)
-	LineOffset() int
-	TotalLines() int
-	Width() int
-	Height() int
-	Clear()
-	Cursor() (column, line int)
-	SetCursor(column, line int)
-	MoveCursor(column, line int)
-	Offsets() (column, line int)
-	SetOffsets(column, line int)
-	ShowCursor()
-	SetText(text string, x, y int, style tcell.Style)
-	Contains(physicalX, physicalY int) bool
-	CursorFromScreenCoordinates(physicalX, physicalY int) (cursorX, cursorY int)
-	Scroll(lines int)
-	PageUp()
-	PageDown()
+type View struct {
+	Left, Width              int
+	Top, Height              int
+	ColumnOffset, LineOffset int
+	CursorColumn, CursorLine int
+	TotalLines               int
+	Style                    tcell.Style
 }
 
-type view struct {
-	screen                   tcell.Screen
-	style                    tcell.Style
-	left, width, top, height int
-	columnOffset, lineOffset int
-	cursorColumn, cursorLine int
-	totalLines               int
+func NewView(style tcell.Style) *View {
+	return &View{Style: style}
 }
 
-func NewView(screen tcell.Screen, style tcell.Style) View {
-	return &view{screen: screen, style: style}
+func (v *View) Resize(left, right, top, bottom int) {
+	v.Left = left
+	v.Width = right - left
+	v.Top = top
+	v.Height = bottom - top
 }
 
-func (v *view) Resize(left, right, top, bottom int) {
-	v.left = left
-	v.width = right - left
-	v.top = top
-	v.height = bottom - top
-}
-
-func (v *view) Clear() {
-	for row := 0; row < v.height; row++ {
-		for col := 0; col < v.width; col++ {
-			v.screen.SetContent(col+v.left, row+v.top, ' ', nil, v.style)
-		}
+func (v *View) ClipText(txt string, line, column int) (string, int, int) {
+	if v.TotalLines <= line {
+		v.TotalLines = line + 1
 	}
-	v.totalLines = 0
+	if line < v.LineOffset || line >= v.LineOffset+v.Height ||
+		column+len(txt) < v.ColumnOffset || column >= v.ColumnOffset+v.Width {
+
+		return "", -1, -1
+	}
+	if column+len(txt) > v.ColumnOffset+v.Width {
+		txt = txt[:v.ColumnOffset+v.Width-column]
+	}
+	if column < v.ColumnOffset {
+		txt = txt[v.ColumnOffset-column:]
+		column = v.ColumnOffset
+	}
+	line += v.Top - v.LineOffset
+	column += v.Left - v.ColumnOffset
+	return txt, line, column
 }
 
-func (v *view) LineOffset() int {
-	return v.lineOffset
-}
-
-func (v *view) TotalLines() int {
-	return v.totalLines
-}
-
-func (v *view) Width() int {
-	return v.width
-}
-
-func (v *view) Height() int {
-	return v.height
-}
-
-func (v *view) Cursor() (column, line int) {
-	return v.cursorColumn, v.cursorLine
-}
-
-func (v *view) SetCursor(column, line int) {
-	v.cursorColumn = column
-	if v.cursorColumn < 0 {
-		v.cursorColumn = 0
+func (v *View) SetCursor(column, line int) {
+	v.CursorColumn = column
+	if v.CursorColumn < 0 {
+		v.CursorColumn = 0
 	}
-	if v.columnOffset > v.cursorColumn {
-		v.columnOffset = v.cursorColumn
+	if v.ColumnOffset > v.CursorColumn {
+		v.ColumnOffset = v.CursorColumn
 	}
-	if v.columnOffset <= v.cursorColumn-v.width {
-		v.columnOffset = v.cursorColumn - v.width + 1
+	if v.ColumnOffset <= v.CursorColumn-v.Width {
+		v.ColumnOffset = v.CursorColumn - v.Width + 1
 	}
-	v.cursorLine = line
-	if v.cursorLine < 0 {
-		v.cursorLine = 0
+	v.CursorLine = line
+	if v.CursorLine < 0 {
+		v.CursorLine = 0
 	}
-	if v.cursorLine > v.totalLines {
-		v.cursorLine = v.totalLines
+	if v.CursorLine >= v.TotalLines+v.Height-1 {
+		v.CursorLine = v.TotalLines + v.Height - 2
 	}
-	if v.lineOffset > v.cursorLine {
-		v.lineOffset = v.cursorLine
+	if v.LineOffset > v.CursorLine {
+		v.LineOffset = v.CursorLine
 	}
-	if v.lineOffset <= v.cursorLine-v.height {
-		v.lineOffset = v.cursorLine - v.height + 1
+	if v.LineOffset <= v.CursorLine-v.Height {
+		v.LineOffset = v.CursorLine - v.Height + 1
 	}
 }
 
-func (v *view) MoveCursor(column, line int) {
-	c, l := v.Cursor()
-	v.SetCursor(column+c, line+l)
+func (v *View) MoveCursor(column, line int) {
+	v.SetCursor(column+v.CursorColumn, line+v.CursorLine)
 }
 
-func (v *view) Offsets() (column, line int) {
-	return v.columnOffset, v.lineOffset
+func (v *View) Contains(physicalX, physicalY int) bool {
+	return physicalX >= v.Left && physicalX < v.Left+v.Width && physicalY >= v.Top && physicalY < v.Top+v.Height
 }
 
-func (v *view) SetOffsets(column, line int) {
-	v.columnOffset = column
-	v.lineOffset = line
+func (v *View) CursorFromScreenCoordinates(physicalX, physicalY int) (cursorX, cursorY int) {
+	return physicalX + v.ColumnOffset - v.Left, physicalY + v.LineOffset - v.Top
 }
 
-func (v *view) ShowCursor() {
-	if v.cursorColumn < v.columnOffset || v.cursorLine < v.lineOffset || v.cursorColumn >= v.columnOffset+v.width || v.cursorLine >= v.lineOffset+v.height {
-		v.screen.HideCursor()
-		return
-	}
-	v.screen.ShowCursor(v.cursorColumn-v.columnOffset+v.left, v.cursorLine-v.lineOffset+v.top)
-}
-
-func (v *view) SetText(text string, x, y int, style tcell.Style) {
-	if v.totalLines <= y {
-		v.totalLines = y + 1
-	}
-	x = x - v.columnOffset
-	y = y - v.lineOffset
-	if x+len(text) < 0 {
-		return
-	}
-	if x >= v.width {
-		return
-	}
-	if y < 0 {
-		return
-	}
-	if y >= v.height {
-		return
-	}
-	if x < 0 {
-		text = text[-x:]
-		x = 0
-	}
-
-	if len(text) >= v.width-x {
-		text = text[:v.width-x]
-	}
-
-	x = x + v.left
-	y = y + v.top
-	for _, c := range text {
-		v.screen.SetContent(x, y, c, nil, style)
-		x++
+func (v *View) Scroll(lines int) {
+	v.LineOffset += lines
+	if v.LineOffset < 0 {
+		v.LineOffset = 0
+	} else if v.LineOffset >= v.TotalLines {
+		v.LineOffset = v.TotalLines - 1
 	}
 }
 
-func (v *view) Contains(physicalX, physicalY int) bool {
-	return physicalX >= v.left && physicalX < v.left+v.width && physicalY >= v.top && physicalY < v.top+v.height
+func (v *View) PageUp() {
+	v.Scroll(-v.Height)
+	v.MoveCursor(0, -v.Height)
 }
 
-func (v *view) CursorFromScreenCoordinates(physicalX, physicalY int) (cursorX, cursorY int) {
-	return physicalX + v.columnOffset - v.left, physicalY + v.lineOffset - v.top
-}
-
-func (v *view) Scroll(lines int) {
-	v.lineOffset += lines
-	if v.lineOffset < 0 {
-		v.lineOffset = 0
-	} else if v.lineOffset >= v.totalLines {
-		v.lineOffset = v.totalLines - 1
-	}
-}
-
-func (v *view) PageUp() {
-	v.Scroll(-v.height)
-	v.MoveCursor(0, -v.height)
-}
-
-func (v *view) PageDown() {
-	v.Scroll(v.height)
-	v.MoveCursor(0, v.height)
+func (v *View) PageDown() {
+	v.Scroll(v.Height)
+	v.MoveCursor(0, v.Height)
 }

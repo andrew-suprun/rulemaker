@@ -9,6 +9,7 @@ import (
 	"league.com/rulemaker/content"
 	"league.com/rulemaker/meta"
 	"league.com/rulemaker/model"
+	"league.com/rulemaker/style"
 	"league.com/rulemaker/window"
 )
 
@@ -101,11 +102,11 @@ func main() {
 		fmt.Fprintf(os.Stderr, "%v\n", e)
 		os.Exit(1)
 	}
-	theme := window.BlueTheme
+	theme := style.BlueTheme
 	if *darkFlag {
-		theme = window.DarkTheme
+		theme = style.DarkTheme
 	} else if *lightFlag {
-		theme = window.LightTheme
+		theme = style.LightTheme
 	}
 	w, e := window.NewWindow(c, metainfo, inputs, operations, theme)
 	if e != nil {

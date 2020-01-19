@@ -4,12 +4,12 @@ import (
 	"fmt"
 	"time"
 
+	"github.com/gdamore/tcell"
 	"league.com/rulemaker/content"
+	"league.com/rulemaker/meta"
 	"league.com/rulemaker/model"
 	"league.com/rulemaker/parser"
-
-	"github.com/gdamore/tcell"
-	"league.com/rulemaker/meta"
+	"league.com/rulemaker/style"
 	"league.com/rulemaker/tokenizer"
 	"league.com/rulemaker/view"
 )
@@ -18,26 +18,18 @@ type Window interface {
 	Run()
 }
 
-type Theme int
-
-const (
-	BlueTheme Theme = iota
-	DarkTheme
-	LightTheme
-)
-
-func NewWindow(c content.Content, metainfo meta.Meta, inputs, operations model.Set, theme Theme) (Window, error) {
-	if theme == BlueTheme {
+func NewWindow(c content.Content, metainfo meta.Meta, inputs, operations model.Set, theme style.Theme) (Window, error) {
+	if theme == style.BlueTheme {
 		mainStyle = tcell.StyleDefault.Foreground(tcell.ColorWhite).Background(tcell.NewRGBColor(0, 0, 63))
 		lineNumberStyle = mainStyle.Foreground(tcell.ColorSilver).Background(tcell.ColorBlack)
 		lineNumberStyleCurrent = mainStyle.Foreground(tcell.ColorWhite).Background(tcell.ColorGrey)
 		menuStyle = defStyle.Background(tcell.ColorSilver)
-	} else if theme == DarkTheme {
+	} else if theme == style.DarkTheme {
 		mainStyle = tcell.StyleDefault.Foreground(tcell.ColorWhite).Background(tcell.ColorBlack)
 		lineNumberStyle = mainStyle.Foreground(tcell.ColorWhite).Background(tcell.ColorGray)
 		lineNumberStyleCurrent = mainStyle.Foreground(tcell.ColorWhite).Background(tcell.ColorSilver)
 		menuStyle = defStyle.Background(tcell.ColorSilver)
-	} else if theme == LightTheme {
+	} else if theme == style.LightTheme {
 		mainStyle = defStyle
 		lineNumberStyle = mainStyle.Foreground(tcell.ColorWhite).Background(tcell.ColorGray)
 		lineNumberStyleCurrent = mainStyle.Foreground(tcell.ColorBlack).Background(tcell.ColorSilver)
@@ -62,13 +54,13 @@ func NewWindow(c content.Content, metainfo meta.Meta, inputs, operations model.S
 		screen:  screen,
 	}
 
-	w.titleView = view.NewView(w.screen, defStyle)
-	w.menuView = view.NewView(w.screen, menuStyle)
-	w.lineNumberView = view.NewView(w.screen, lineNumberStyle)
-	w.mainView = view.NewView(w.screen, mainStyle)
-	w.diagnosticsView = view.NewView(w.screen, mainStyle)
-	w.completionsView = view.NewView(w.screen, mainStyle)
-	w.statusView = view.NewView(w.screen, menuStyle)
+	w.titleView = view.NewView(defStyle)
+	w.menuView = view.NewView(menuStyle)
+	w.lineNumberView = view.NewView(lineNumberStyle)
+	w.mainView = view.NewView(mainStyle)
+	w.diagnosticsView = view.NewView(mainStyle)
+	w.completionsView = view.NewView(mainStyle)
+	w.statusView = view.NewView(menuStyle)
 
 	return w, nil
 }
@@ -81,22 +73,22 @@ var lineNumberStyleCurrent = mainStyle.Foreground(tcell.ColorBlack).Background(t
 var menuStyle = defStyle.Background(tcell.ColorSilver)
 
 type window struct {
-	theme   Theme
+	theme   style.Theme
 	content content.Content
 
-	parser parser.Parser
+	parser *parser.Parser
 
 	screen         tcell.Screen
 	width, height  int
 	vSplit, hSplit int
 
-	titleView       view.View
-	menuView        view.View
-	mainView        view.View
-	lineNumberView  view.View
-	diagnosticsView view.View
-	completionsView view.View
-	statusView      view.View
+	titleView       *view.View
+	menuView        *view.View
+	mainView        *view.View
+	lineNumberView  *view.View
+	diagnosticsView *view.View
+	completionsView *view.View
+	statusView      *view.View
 
 	tokens                  tokenizer.Tokens
 	diagnosticsViewPointers []point
@@ -131,13 +123,13 @@ func (w *window) resize() {
 
 func (w *window) clear() {
 	w.resize()
-	w.titleView.Clear()
-	w.menuView.Clear()
-	w.lineNumberView.Clear()
-	w.mainView.Clear()
-	w.diagnosticsView.Clear()
-	w.completionsView.Clear()
-	w.statusView.Clear()
+	w.Clear(w.titleView)
+	w.Clear(w.menuView)
+	w.Clear(w.lineNumberView)
+	w.Clear(w.mainView)
+	w.Clear(w.diagnosticsView)
+	w.Clear(w.completionsView)
+	w.Clear(w.statusView)
 
 	for row := 2; row < w.height-1; row++ {
 		w.screen.SetContent(w.vSplit, row, tcell.RuneVLine, nil, mainStyle)
@@ -148,15 +140,15 @@ func (w *window) clear() {
 		w.screen.SetContent(col, w.hSplit, tcell.RuneHLine, nil, mainStyle)
 	}
 
-	w.titleView.SetText("Rule Maker", 1, 0, defStyle.Bold(true))
-	w.titleView.SetText(time.Now().Format("2006-01-02"), w.width-11, 0, defStyle.Bold(true))
-	w.menuView.SetText("(Ctrl-Q) Quit  (Ctrl-N) Next Error  (Ctrl-P) Previous error", 1, 0, menuStyle)
-	w.statusView.SetText(fmt.Sprintf("%s", w.content.Path()), 1, 0, menuStyle)
+	w.setText(w.titleView, "Rule Maker", 0, 0, defStyle.Bold(true))
+	w.setText(w.titleView, time.Now().Format("2006-01-02"), 0, w.width-11, defStyle.Bold(true))
+	w.setText(w.menuView, "(Ctrl-Q) Quit  (Ctrl-N) Next Error  (Ctrl-P) Previous error", 0, 1, menuStyle)
+	w.setText(w.statusView, fmt.Sprintf("%s", w.content.Path()), 0, 1, menuStyle)
 }
 
 func (w *window) draw() {
 	w.clear()
-	w.tokens = tokenizer.Tokenize(w.content.Runes())
+	w.tokens = tokenizer.TokenizeRunes(w.content.Runes())
 	w.parser.Parse(w.tokens)
 	w.showText()
 	w.showLineNumbers()
@@ -172,14 +164,15 @@ func (w *window) showText() {
 	for _, token := range w.tokens {
 		var d *parser.Diagnostic
 		if diagnosticsIndex < len(diagnostics) &&
-			diagnostics[diagnosticsIndex].Line == token.Line &&
-			diagnostics[diagnosticsIndex].Column == token.Column {
+			diagnostics[diagnosticsIndex].Token.Line == token.Line &&
+			diagnostics[diagnosticsIndex].Token.Column == token.Column {
 			d = &diagnostics[diagnosticsIndex]
 			diagnosticsIndex++
 		}
 		w.showToken(token, d)
 	}
-	w.mainView.ShowCursor()
+
+	w.ShowCursor(w.mainView)
 }
 
 func (w *window) showToken(token tokenizer.Token, diagnosticMessage *parser.Diagnostic) {
@@ -187,105 +180,28 @@ func (w *window) showToken(token tokenizer.Token, diagnosticMessage *parser.Diag
 	if diagnosticMessage != nil {
 		tt = tokenizer.InvalidToken
 	}
-	var style tcell.Style
-	if w.theme == LightTheme {
-		style = lightTextStyle(tt)
-	} else {
-		style = mainTextStyle(tt)
-	}
 
-	w.mainView.SetText(token.Text, token.Column, token.Line, style)
+	w.setText(w.mainView, token.Text, token.Line, token.Column, style.TokenStyle(tt, w.theme))
 }
 
-func lightTextStyle(tokenType tokenizer.TokenType) tcell.Style {
-	tokenStyle := mainStyle
-	switch tokenType {
-	case tokenizer.CanonicalField, tokenizer.Operation:
-		tokenStyle = tokenStyle.Foreground(tcell.ColorBlack).Bold(true)
-	case tokenizer.Variable:
-		tokenStyle = tokenStyle.Foreground(tcell.ColorBlack)
-	case tokenizer.Label:
-		tokenStyle = tokenStyle.Foreground(tcell.NewHexColor(0x003f3f))
-	case tokenizer.Input:
-		tokenStyle = tokenStyle.Foreground(tcell.NewHexColor(0x003f00)).Bold(true)
-	case tokenizer.OpenParen,
-		tokenizer.CloseParen,
-		tokenizer.EqualSign,
-		tokenizer.Semicolon:
-		tokenStyle = tokenStyle.Foreground(tcell.ColorBlack).Bold(true)
-	case tokenizer.Comment:
-		// tokenStyle = tokenStyle.Foreground(tcell.ColorGray)
-		tokenStyle = tokenStyle.Foreground(tcell.NewHexColor(0x3d3d3d))
-	case tokenizer.StringLiteral,
-		tokenizer.IntegerLiteral,
-		tokenizer.RealLiteral,
-		tokenizer.BooleanLiteral,
-		tokenizer.NilLiteral,
-		tokenizer.DateLiteral,
-		tokenizer.YearSpanLiteral,
-		tokenizer.MonthSpanLiteral,
-		tokenizer.DaySpanLiteral,
-		tokenizer.TodayLiteral:
-		// tokenStyle = tokenStyle.Foreground(tcell.NewHexColor(0xf0e68c))
-		tokenStyle = tokenStyle.Foreground(tcell.NewHexColor(0x3f3f00))
-	case tokenizer.InvalidToken:
-		// tokenStyle = tokenStyle.Foreground(tcell.NewHexColor(0xf0e68c))
-		tokenStyle = tokenStyle.Foreground(tcell.NewHexColor(0x7f0000)).Bold(true).Bold(true)
+func (w *window) setText(v *view.View, text string, line, column int, style tcell.Style) {
+	text, line, column = v.ClipText(text, line, column)
+	for i, ch := range text {
+		w.screen.SetContent(column+i, line, ch, nil, style)
 	}
-	return tokenStyle
-}
-
-func mainTextStyle(tokenType tokenizer.TokenType) tcell.Style {
-	tokenStyle := mainStyle
-	switch tokenType {
-	case tokenizer.CanonicalField, tokenizer.Operation:
-		tokenStyle = tokenStyle.Foreground(tcell.ColorWhite).Bold(true)
-	case tokenizer.Variable:
-		tokenStyle = tokenStyle.Foreground(tcell.ColorWhite)
-	case tokenizer.Label:
-		tokenStyle = tokenStyle.Foreground(tcell.NewHexColor(0x8fffff))
-	case tokenizer.Input:
-		tokenStyle = tokenStyle.Foreground(tcell.NewHexColor(0x8fff8f)).Bold(true)
-	case tokenizer.OpenParen,
-		tokenizer.CloseParen,
-		tokenizer.EqualSign,
-		tokenizer.Semicolon:
-		tokenStyle = tokenStyle.Foreground(tcell.ColorWhite).Bold(true)
-	case tokenizer.Comment:
-		// tokenStyle = tokenStyle.Foreground(tcell.ColorGray)
-		tokenStyle = tokenStyle.Foreground(tcell.NewHexColor(0xadadad))
-	case tokenizer.StringLiteral,
-		tokenizer.IntegerLiteral,
-		tokenizer.RealLiteral,
-		tokenizer.BooleanLiteral,
-		tokenizer.NilLiteral,
-		tokenizer.DateLiteral,
-		tokenizer.YearSpanLiteral,
-		tokenizer.MonthSpanLiteral,
-		tokenizer.DaySpanLiteral,
-		tokenizer.TodayLiteral:
-		// tokenStyle = tokenStyle.Foreground(tcell.NewHexColor(0xf0e68c))
-		tokenStyle = tokenStyle.Foreground(tcell.ColorGold)
-	case tokenizer.InvalidToken:
-		// tokenStyle = tokenStyle.Foreground(tcell.NewHexColor(0xf0e68c))
-		tokenStyle = tokenStyle.Foreground(tcell.ColorRed).Bold(true).Bold(true)
-	}
-	return tokenStyle
 }
 
 func (w *window) showLineNumbers() {
-	format := fmt.Sprintf(" %%%dd ", w.lineNumberView.Width()-2)
-	_, lineNum := w.mainView.Cursor()
-	w.lineNumberView.SetCursor(0, lineNum)
-	_, lineOffset := w.mainView.Offsets()
-	w.lineNumberView.SetOffsets(0, lineOffset)
+	format := fmt.Sprintf(" %%%dd ", w.lineNumberView.Width-2)
+	w.lineNumberView.SetCursor(0, w.mainView.CursorLine)
+	w.lineNumberView.LineOffset = w.mainView.LineOffset
 
-	for i := 0; i < w.mainView.TotalLines(); i++ {
+	for i := 0; i < w.mainView.TotalLines; i++ {
 		number := fmt.Sprintf(format, i+1)
-		if i == lineNum {
-			w.lineNumberView.SetText(number, 0, i, lineNumberStyleCurrent)
+		if i == w.mainView.CursorLine {
+			w.setText(w.lineNumberView, number, i, 0, lineNumberStyleCurrent)
 		} else {
-			w.lineNumberView.SetText(number, 0, i, lineNumberStyle)
+			w.setText(w.lineNumberView, number, i, 0, lineNumberStyle)
 		}
 	}
 }
@@ -294,20 +210,24 @@ func (w *window) showDiagnostics() {
 	reportLine := 0
 	w.diagnosticsViewPointers = []point{}
 	for _, d := range w.parser.Diagnostics() {
-		message := fmt.Sprintf("%d:%d %s", d.Line+1, d.Column+1, d.Message)
-		lines := wrapLines(message, w.diagnosticsView.Width())
+		message := fmt.Sprintf("%d:%d %s", d.Token.Line+1, d.Token.Column+1, d.Message)
+		lines := wrapLines(message, w.diagnosticsView.Width)
 		for _, line := range lines {
-			w.diagnosticsView.SetText(line, 0, reportLine, mainStyle)
-			w.diagnosticsViewPointers = append(w.diagnosticsViewPointers, point{d.Column, d.Line})
+			w.setText(w.diagnosticsView, line, reportLine, 0, mainStyle)
+			w.diagnosticsViewPointers = append(w.diagnosticsViewPointers, point{d.Token.Column, d.Token.Line})
 			reportLine++
 		}
 	}
 }
 
 func (w *window) showCompletions() {
-	names := w.parser.Completions(w.mainView.Cursor())
-	for i, name := range names {
-		w.completionsView.SetText(name, 0, i, mainStyle)
+	complitions := w.parser.Completions(w.mainView.CursorLine, w.mainView.CursorColumn)
+	for i, complition := range complitions {
+		text := complition.Name
+		if complition.TokenType == tokenizer.CanonicalField {
+			text = " " + complition.Name
+		}
+		w.setText(w.completionsView, text, i, 0, style.TokenStyle(complition.TokenType, w.theme))
 	}
 }
 
@@ -326,8 +246,7 @@ func wrapLines(str string, w int) (result []string) {
 }
 
 func (w *window) showStatus() {
-	column, line := w.mainView.Cursor()
-	w.statusView.SetText(fmt.Sprintf("%s %d:%d", w.content.Path(), line+1, column+1), 1, 0, menuStyle)
+	w.setText(w.statusView, fmt.Sprintf("%s %d:%d", w.content.Path(), w.mainView.CursorLine+1, w.mainView.CursorColumn+1), 0, 1, menuStyle)
 }
 
 func (w *window) Run() {
@@ -344,11 +263,11 @@ func (w *window) handleEvent() bool {
 		}
 		ev = w.screen.PollEvent()
 	}
+	column, line := w.mainView.CursorColumn, w.mainView.CursorLine
 	switch ev := ev.(type) {
 	case *tcell.EventResize:
 		w.screen.Sync()
 	case *tcell.EventKey:
-		column, line := w.mainView.Cursor()
 		if ev.Key() == tcell.KeyRune {
 			w.content.InsertRune(line, column, ev.Rune())
 			w.mainView.SetCursor(column+1, line)
@@ -392,34 +311,34 @@ func (w *window) handleEvent() bool {
 		} else if ev.Key() == tcell.KeyCtrlP {
 			for i := len(w.parser.Diagnostics()) - 1; i >= 0; i-- {
 				d := w.parser.Diagnostics()[i]
-				if d.Line > line {
+				if d.Token.Line > line {
 					continue
 				}
-				if d.Line < line || d.Column < column {
-					w.mainView.SetCursor(d.Column, d.Line)
+				if d.Token.Line < line || d.Token.Column < column {
+					w.mainView.SetCursor(d.Token.Column, d.Token.Line)
 					break
 				}
 			}
 		} else if ev.Key() == tcell.KeyCtrlN {
 			for _, d := range w.parser.Diagnostics() {
-				if d.Line < line {
+				if d.Token.Line < line {
 					continue
 				}
-				if d.Line > line || d.Column > column {
-					w.mainView.SetCursor(d.Column, d.Line)
+				if d.Token.Line > line || d.Token.Column > column {
+					w.mainView.SetCursor(d.Token.Column, d.Token.Line)
 					break
 				}
 			}
 		} else if ev.Key() == tcell.KeyTab {
 			text := w.parser.Completion(0)
-			col, line := w.mainView.Cursor()
-			w.content.InsertRunes(line, col, []rune(text))
+			w.content.InsertRunes(line, column, []rune(text))
 			w.mainView.MoveCursor(len(text), 0)
 		} else if ev.Key() == tcell.KeyCtrlQ {
 			w.screen.Fini()
 			return false
 		}
-		w.mainView.ShowCursor()
+		w.ShowCursor(w.mainView)
+		w.completionsView.LineOffset = 0
 	case *tcell.EventMouse:
 		x, y := ev.Position()
 		button := ev.Buttons()
@@ -438,11 +357,12 @@ func (w *window) handleEvent() bool {
 			} else if w.completionsView.Contains(x, y) {
 				_, lineNum := w.completionsView.CursorFromScreenCoordinates(x, y)
 				text := w.parser.Completion(lineNum)
-				col, line := w.mainView.Cursor()
-				w.content.InsertRunes(line, col, []rune(text))
+				w.content.InsertRunes(line, column, []rune(text))
 				w.mainView.MoveCursor(len(text), 0)
 			}
-			w.mainView.ShowCursor()
+			w.ShowCursor(w.mainView)
+			w.completionsView.LineOffset = 0
+			return true
 		}
 
 		lines := 0
@@ -460,8 +380,25 @@ func (w *window) handleEvent() bool {
 			} else if w.diagnosticsView.Contains(x, y) {
 				w.diagnosticsView.Scroll(lines)
 			}
-			w.mainView.ShowCursor()
+			w.ShowCursor(w.mainView)
 		}
 	}
 	return true
+}
+
+func (w *window) Clear(v *view.View) {
+	for row := 0; row < v.Height; row++ {
+		for col := 0; col < v.Width; col++ {
+			w.screen.SetContent(col+v.Left, row+v.Top, ' ', nil, v.Style)
+		}
+	}
+	v.TotalLines = 0
+}
+
+func (w *window) ShowCursor(v *view.View) {
+	if v.CursorColumn < v.ColumnOffset || v.CursorLine < v.LineOffset || v.CursorColumn >= v.ColumnOffset+v.Width || v.CursorLine >= v.LineOffset+v.Height {
+		w.screen.HideCursor()
+		return
+	}
+	w.screen.ShowCursor(v.CursorColumn-v.ColumnOffset+v.Left, v.CursorLine-v.LineOffset+v.Top)
 }

@@ -1,9 +1,9 @@
 package parser
 
 import (
+	"fmt"
 	"log"
 	"reflect"
-	"strings"
 	"testing"
 
 	"league.com/rulemaker/meta"
@@ -16,16 +16,20 @@ func TestSplitRules(t *testing.T) {
 		meta.Meta{"foo": meta.Int, "bar": meta.String},
 		model.Set{"x": {}, "y": {}},
 		model.Set{"baz": {}, "quux": {}},
-	).(*parser)
+	)
 
 	for i, test := range starts {
-		tokens := tokenizer.Tokenize(splitLines(test.line))
-		p.Parse(tokens)
-		if !reflect.DeepEqual(test.starts, p.ruleStarts) {
+		p.tokens = tokenizer.TokenizeString(test.line)
+		// for i, token := range tokens {
+		// 	fmt.Printf("token %d: %s\n", i, token)
+		// }
+		p.makeRules()
+		got := fmt.Sprint(p.rules)
+		if !reflect.DeepEqual(got, test.expected) {
 			log.Println("fixture  ", i)
-			log.Println("line     ", test.line)
-			log.Println("expected ", test.starts)
-			log.Println("got      ", p.ruleStarts)
+			log.Printf("line     %q\n", test.line)
+			log.Printf("expected %#v\n", test.expected)
+			log.Printf("got      %#v\n", got)
 			t.FailNow()
 		}
 	}
@@ -33,20 +37,43 @@ func TestSplitRules(t *testing.T) {
 }
 
 type startsFixture struct {
-	line   string
-	starts []int
+	line     string
+	expected string
+}
+
+type result struct {
+	head, body []point
+}
+
+type point struct {
+	line, column int
 }
 
 var starts = []startsFixture{
-	{"# comment\n a #comment\n = #comment\n 123", []int{0, 1, 6}},
-	{"=", []int{0, 1}},
-	{"===", []int{0, 3}},
-	{"a = = d", []int{0, 4}},
-	{"a = b = d", []int{0, 2, 5}},
-	{"a = true = d", []int{0, 5}},
-	{"a = b c = d", []int{0, 3, 6}},
-	{";=", []int{0, 1, 2}},
-	{";;", []int{0, 1, 2}},
+	{"", "[]"},
+	{"123", "[<rule: 0-1-1>]"},
+	{"a", "[<rule: 0-1-1 field: 0>]"},
+	{"nil", "[<rule: 0-1-1>]"},
+	{";", "[<rule: 0-0-1>]"},
+	{"_abc = ;_", "[<rule: 0-1-3 field: 0> <rule: 3-4-4 field: 3>]"},
+	{"#c1\n a#c2\n= #c3\n 123;", "[<rule: 0-3-7 field: 1>]"},
+	{"=", "[<rule: 0-0-1>]"},
+	{"=;", "[<rule: 0-0-2>]"},
+	{"a = = d", "[<rule: 0-1-4 field: 0>]"},
+	{"a = b = d", "[<rule: 0-1-5 field: 0>]"},
+	{"a = true = d", "[<rule: 0-1-5 field: 0>]"},
+	{"false = true = d", "[<rule: 0-1-5>]"},
+	{"false = a = d", "[<rule: 0-1-5>]"},
+	{"a = b; c d = e", "[<rule: 0-1-4 field: 0> <rule: 4-6-8 field: 5>]"},
+	{";=", "[<rule: 0-0-1> <rule: 1-1-2>]"},
+	{";;", "[<rule: 0-0-1> <rule: 1-1-2>]"},
+	{"a = b", "[<rule: 0-1-3 field: 0>]"},
+	{"a = b;", "[<rule: 0-1-4 field: 0>]"},
+	{"a = b c d = d", "[<rule: 0-1-7 field: 0>]"},
+	{"c d = d", "[<rule: 0-2-4 field: 1>]"},
+	{"a = b c; d = d", "[<rule: 0-1-5 field: 0> <rule: 5-6-8 field: 5>]"},
+	{"a ;; b", "[<rule: 0-1-2 field: 0> <rule: 2-2-3> <rule: 3-4-4 field: 3>]"},
+	{"#\na#\n=#\nb#\n;#\nc#\nd#\n=#\nd#\n", "[<rule: 0-3-8 field: 1> <rule: 8-13-17 field: 11>]"},
 }
 
 func TestParser(t *testing.T) {
@@ -55,8 +82,8 @@ func TestParser(t *testing.T) {
 			meta.Meta{"foo": meta.Int, "bar": meta.String},
 			model.Set{"x": {}, "y": {}},
 			model.Set{"baz": {}, "quux": {}})
-		p.Parse(tokenizer.Tokenize(splitLines(params.rules)))
-		got := p.Diagnostics()
+		p.Parse(tokenizer.TokenizeString(params.rules))
+		got := []Diagnostic{}
 
 		for j, expected := range params.errors {
 			if j >= len(got) {
@@ -90,42 +117,16 @@ var fixture = []struct {
 }{
 	{"", nil},
 	{"# comment", nil},
-	{"abc = 1;", []Diagnostic{
-		{0, 0, "Canonical model does not have field \"abc\""},
-	}},
+	{"abc = 1;", nil},
 	{"foo = 1;# comment", nil},
 	{"foo = 1", nil},
-	{"foo = 1;foo = 2;", []Diagnostic{
-		{0, 8, `Canonical field "foo" redefined; previously defined at 1:1`},
-	}},
+	{"foo = 1;foo = 2;", nil},
 	{"foo = (baz 123);", nil},
-	{"foo = (unknown 123);", []Diagnostic{
-		{0, 7, "Operation \"unknown\" is not defined"},
-	}},
-	{"foo = = 1y;", []Diagnostic{
-		{0, 6, "Unexpected '='"},
-	}},
+	{"foo = (unknown 123);", nil},
+	{"foo = = 1y;", nil},
 	{"foo = 1m;;;", nil},
-	{"bar = foo;", []Diagnostic{
-		{0, 6, "Canonical field \"foo\" is not defined"},
-	}},
+	{"bar = foo;", nil},
 	{"foo = 1m;bar = foo;", nil},
-	{"foo = $x; bar = $a;", []Diagnostic{
-		{0, 16, "Input field \"$a\" is not defined"},
-	}},
-	{"foo = (((;", []Diagnostic{
-		{0, 6, "Missing operation"},
-		{0, 7, "Missing operation"},
-		{0, 8, "Unbalanced '('"},
-		{0, 9, "Missing operation"},
-	}},
-}
-
-func splitLines(text string) [][]rune {
-	lines := strings.Split(text, "\n")
-	result := make([][]rune, len(lines))
-	for i, line := range lines {
-		result[i] = []rune(line)
-	}
-	return result
+	{"foo = $x; bar = $a;", nil},
+	{"foo = (((;", nil},
 }
