@@ -2,6 +2,7 @@ package window
 
 import (
 	"fmt"
+	"log"
 	"time"
 
 	"github.com/gdamore/tcell"
@@ -20,20 +21,20 @@ type Window interface {
 
 func NewWindow(c content.Content, metainfo meta.Meta, inputs, operations model.Set, theme style.Theme) (Window, error) {
 	if theme == style.BlueTheme {
-		mainStyle = tcell.StyleDefault.Foreground(tcell.ColorWhite).Background(tcell.NewRGBColor(0, 0, 63))
-		lineNumberStyle = mainStyle.Foreground(tcell.ColorSilver).Background(tcell.ColorBlack)
-		lineNumberStyleCurrent = mainStyle.Foreground(tcell.ColorWhite).Background(tcell.ColorGrey)
-		menuStyle = defStyle.Background(tcell.ColorSilver)
+		mainStyle = tcell.StyleDefault.Foreground(tcell.Color231).Background(tcell.Color17)
+		lineNumberStyle = mainStyle.Foreground(tcell.ColorSilver).Background(tcell.Color235)
+		lineNumberStyleCurrent = mainStyle.Foreground(tcell.Color231).Background(tcell.ColorGrey)
+		menuStyle = tcell.StyleDefault.Foreground(tcell.Color231).Background(tcell.ColorSilver)
 	} else if theme == style.DarkTheme {
-		mainStyle = tcell.StyleDefault.Foreground(tcell.ColorWhite).Background(tcell.ColorBlack)
-		lineNumberStyle = mainStyle.Foreground(tcell.ColorWhite).Background(tcell.ColorGray)
-		lineNumberStyleCurrent = mainStyle.Foreground(tcell.ColorWhite).Background(tcell.ColorSilver)
-		menuStyle = defStyle.Background(tcell.ColorSilver)
+		mainStyle = tcell.StyleDefault.Foreground(tcell.Color231).Background(tcell.Color235)
+		lineNumberStyle = mainStyle.Foreground(tcell.Color231).Background(tcell.Color238)
+		lineNumberStyleCurrent = mainStyle.Foreground(tcell.Color231).Background(tcell.Color242)
+		menuStyle = tcell.StyleDefault.Foreground(tcell.Color231).Background(tcell.Color244)
 	} else if theme == style.LightTheme {
-		mainStyle = defStyle
-		lineNumberStyle = mainStyle.Foreground(tcell.ColorWhite).Background(tcell.ColorGray)
-		lineNumberStyleCurrent = mainStyle.Foreground(tcell.ColorBlack).Background(tcell.ColorSilver)
-		menuStyle = defStyle.Background(tcell.ColorSilver)
+		mainStyle = tcell.StyleDefault.Foreground(tcell.ColorBlack).Background(tcell.Color231)
+		lineNumberStyle = mainStyle.Foreground(tcell.ColorBlack).Background(tcell.Color250)
+		lineNumberStyleCurrent = mainStyle.Foreground(tcell.ColorBlack).Background(tcell.Color248).Bold(true)
+		menuStyle = tcell.StyleDefault.Foreground(tcell.ColorBlack).Background(tcell.ColorSilver)
 	}
 
 	screen, e := tcell.NewScreen()
@@ -43,7 +44,7 @@ func NewWindow(c content.Content, metainfo meta.Meta, inputs, operations model.S
 	if e := screen.Init(); e != nil {
 		return nil, e
 	}
-	screen.SetStyle(defStyle)
+	screen.SetStyle(mainStyle)
 	screen.EnableMouse()
 	screen.Clear()
 
@@ -54,7 +55,7 @@ func NewWindow(c content.Content, metainfo meta.Meta, inputs, operations model.S
 		screen:  screen,
 	}
 
-	w.titleView = view.NewView(defStyle)
+	w.titleView = view.NewView(mainStyle)
 	w.menuView = view.NewView(menuStyle)
 	w.lineNumberView = view.NewView(lineNumberStyle)
 	w.mainView = view.NewView(mainStyle)
@@ -65,12 +66,12 @@ func NewWindow(c content.Content, metainfo meta.Meta, inputs, operations model.S
 	return w, nil
 }
 
-var defStyle tcell.Style
-
-var mainStyle = tcell.StyleDefault.Foreground(tcell.ColorWhite).Background(tcell.NewRGBColor(0, 0, 63))
-var lineNumberStyle = mainStyle.Foreground(tcell.ColorSilver).Background(tcell.ColorBlack)
-var lineNumberStyleCurrent = mainStyle.Foreground(tcell.ColorBlack).Background(tcell.ColorSilver)
-var menuStyle = defStyle.Background(tcell.ColorSilver)
+var (
+	mainStyle              tcell.Style
+	lineNumberStyle        tcell.Style
+	lineNumberStyleCurrent tcell.Style
+	menuStyle              tcell.Style
+)
 
 type window struct {
 	theme   style.Theme
@@ -140,8 +141,8 @@ func (w *window) clear() {
 		w.screen.SetContent(col, w.hSplit, tcell.RuneHLine, nil, mainStyle)
 	}
 
-	w.setText(w.titleView, "Rule Maker", 0, 0, defStyle.Bold(true))
-	w.setText(w.titleView, time.Now().Format("2006-01-02"), 0, w.width-11, defStyle.Bold(true))
+	w.setText(w.titleView, "Rule Maker", 0, 0, mainStyle.Bold(true))
+	w.setText(w.titleView, time.Now().Format("2006-01-02"), 0, w.width-11, mainStyle.Bold(true))
 	w.setText(w.menuView, "(Ctrl-Q) Quit  (Ctrl-N) Next Error  (Ctrl-P) Previous error", 0, 1, menuStyle)
 	w.setText(w.statusView, fmt.Sprintf("%s", w.content.Path()), 0, 1, menuStyle)
 }
@@ -339,6 +340,7 @@ func (w *window) handleEvent() bool {
 		}
 		w.ShowCursor(w.mainView)
 		w.completionsView.LineOffset = 0
+		log.Printf("### key: name: %v   key: %v   mod: %v   rune: %v\n", ev.Name(), ev.Key(), ev.Modifiers(), ev.Rune())
 	case *tcell.EventMouse:
 		x, y := ev.Position()
 		button := ev.Buttons()

@@ -27,31 +27,32 @@ func TokenStyle(tokenType tokenizer.TokenType, theme Theme) tcell.Style {
 
 func blueStyle(tokenType tokenizer.TokenType) tcell.Style {
 	result := mainStyles[tokenType]
-	return result.Background(tcell.NewRGBColor(0, 0, 63))
+	return result.Background(tcell.Color17)
 }
 
 func darkStyle(tokenType tokenizer.TokenType) tcell.Style {
 	result := mainStyles[tokenType]
-	return result.Background(tcell.ColorBlack)
+	return result.Background(tcell.Color235)
 }
 
 func lightStyle(tokenType tokenizer.TokenType) tcell.Style {
-	return lightStyles[tokenType]
+	result := lightStyles[tokenType]
+	return result.Background(tcell.Color231)
 }
 
 var defStyle tcell.Style
 var blueTheme = defStyle.Background(tcell.NewRGBColor(0, 0, 63))
 
 var mainStyles = map[tokenizer.TokenType]tcell.Style{
-	tokenizer.CanonicalField:   defStyle.Foreground(tcell.ColorWhite).Bold(true),
-	tokenizer.Operation:        defStyle.Foreground(tcell.ColorWhite).Bold(true),
-	tokenizer.Variable:         defStyle.Foreground(tcell.ColorWhite),
-	tokenizer.Label:            defStyle.Foreground(tcell.NewHexColor(0x8fffff)),
-	tokenizer.Input:            defStyle.Foreground(tcell.NewHexColor(0x8fff8f)).Bold(true),
-	tokenizer.OpenParen:        defStyle.Foreground(tcell.ColorWhite).Bold(true),
-	tokenizer.CloseParen:       defStyle.Foreground(tcell.ColorWhite).Bold(true),
-	tokenizer.EqualSign:        defStyle.Foreground(tcell.ColorWhite).Bold(true),
-	tokenizer.Semicolon:        defStyle.Foreground(tcell.ColorWhite).Bold(true),
+	tokenizer.CanonicalField:   defStyle.Foreground(tcell.Color231),
+	tokenizer.Operation:        defStyle.Foreground(tcell.Color87).Bold(true),
+	tokenizer.Variable:         defStyle.Foreground(tcell.Color231),
+	tokenizer.Label:            defStyle.Foreground(tcell.ColorTurquoise),
+	tokenizer.Input:            defStyle.Foreground(tcell.ColorGreenYellow),
+	tokenizer.OpenParen:        defStyle.Foreground(tcell.Color231).Bold(true),
+	tokenizer.CloseParen:       defStyle.Foreground(tcell.Color231).Bold(true),
+	tokenizer.EqualSign:        defStyle.Foreground(tcell.Color231).Bold(true),
+	tokenizer.Semicolon:        defStyle.Foreground(tcell.Color231).Bold(true),
 	tokenizer.Comment:          defStyle.Foreground(tcell.NewHexColor(0xadadad)),
 	tokenizer.StringLiteral:    defStyle.Foreground(tcell.ColorGold),
 	tokenizer.IntegerLiteral:   defStyle.Foreground(tcell.ColorGold),
@@ -68,10 +69,10 @@ var mainStyles = map[tokenizer.TokenType]tcell.Style{
 
 var lightStyles = map[tokenizer.TokenType]tcell.Style{
 	tokenizer.CanonicalField:   defStyle.Foreground(tcell.ColorBlack).Bold(true),
-	tokenizer.Operation:        defStyle.Foreground(tcell.ColorBlack).Bold(true),
+	tokenizer.Operation:        defStyle.Foreground(tcell.Color18).Bold(true),
 	tokenizer.Variable:         defStyle.Foreground(tcell.ColorBlack),
 	tokenizer.Label:            defStyle.Foreground(tcell.NewHexColor(0x003f3f)),
-	tokenizer.Input:            defStyle.Foreground(tcell.NewHexColor(0x003f00)).Bold(true),
+	tokenizer.Input:            defStyle.Foreground(tcell.ColorDarkGreen).Bold(true),
 	tokenizer.OpenParen:        defStyle.Foreground(tcell.ColorBlack).Bold(true),
 	tokenizer.CloseParen:       defStyle.Foreground(tcell.ColorBlack).Bold(true),
 	tokenizer.EqualSign:        defStyle.Foreground(tcell.ColorBlack).Bold(true),
