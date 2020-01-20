@@ -419,6 +419,10 @@ func (p *Parser) completionsForBody(ruleIndex int, prefix string, tokenType toke
 	return result
 }
 
+func (p *Parser) TotalCompletions() int {
+	return len(p.completions)
+}
+
 func (p *Parser) Completion(lineNum int) string {
 	if lineNum < len(p.completions) {
 		return p.completions[lineNum]

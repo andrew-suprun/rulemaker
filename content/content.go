@@ -6,21 +6,17 @@ import (
 	"strings"
 )
 
-type Content interface {
-	Save() error
-	Path() string
-	Runes() [][]rune
-	InsertLine(lineOffset int, line []rune)
-	InsertLines(lineOffset int, lines [][]rune)
-	RemoveLines(lineOffset, numLines int)
-	InsertRune(lineOffset, runeOffset int, rune rune)
-	InsertRunes(lineOffset, runeOffset int, runes []rune)
-	RemoveRunes(lineOffset, runeOffset, numRunes int)
-	SplitLine(lineOffset, runeOffset int)
-	JoinLines(lineOffset int) int
+type Content struct {
+	Path   string
+	Runes  [][]rune
+	Cursor Cursor
 }
 
-func NewContent(path string) (Content, error) {
+type Cursor struct {
+	Line, Column int
+}
+
+func NewContent(path string) (*Content, error) {
 	file, err := os.Open(path)
 	if err != nil {
 		return nil, err
@@ -37,101 +33,132 @@ func NewContent(path string) (Content, error) {
 		line = strings.TrimRight(line, " ")
 		runes[i] = []rune(line)
 	}
-	return &content{
-		path:  path,
-		runes: runes,
+	for len(runes[len(runes)-1]) == 0 {
+		runes = runes[:len(runes)-1]
+	}
+	return &Content{
+		Path:  path,
+		Runes: runes,
 	}, nil
 }
 
-type content struct {
-	path  string
-	runes [][]rune
-}
-
-func (c *content) Save() error {
+func (c *Content) Save() error {
 	return nil // TODO
 }
 
-func (c *content) Path() string {
-	return c.path
-}
-
-func (c *content) Runes() [][]rune {
-	return c.runes
-}
-
-func (c *content) InsertLine(lineOffset int, line []rune) {
-	// TODO
-}
-
-func (c *content) InsertLines(lineOffset int, lines [][]rune) {
-	// TODO
-}
-
-func (c *content) RemoveLines(lineOffset, numLines int) {
-	// TODO
-}
-
-func (c *content) InsertRune(lineOffset, runeOffset int, ch rune) {
-	c.InsertRunes(lineOffset, runeOffset, []rune{ch})
-}
-
-func (c *content) InsertRunes(lineOffset, runeOffset int, runes []rune) {
-	for len(c.runes) <= lineOffset {
-		c.runes = append(c.runes, nil)
+func (c *Content) SetCursor(line, column int) {
+	c.Cursor.Column = column
+	if c.Cursor.Column < 0 {
+		c.Cursor.Column = 0
 	}
-	line := c.runes[lineOffset]
-	for len(line) <= runeOffset {
+	c.Cursor.Line = line
+	if c.Cursor.Line < 0 {
+		c.Cursor.Line = 0
+	}
+}
+
+func (c *Content) MoveCursorUp(lines int) {
+	c.Cursor.Line -= lines
+	if c.Cursor.Line < 0 {
+		c.Cursor.Line = 0
+	}
+}
+
+func (c *Content) MoveCursorDown(lines, height int) {
+	c.Cursor.Line += lines
+	if c.Cursor.Line > len(c.Runes)+height-1 {
+		c.Cursor.Line = len(c.Runes) + height - 1
+	}
+}
+
+func (c *Content) MoveCursorLeft(columns int) {
+	c.Cursor.Column -= columns
+	if c.Cursor.Column < 0 {
+		c.Cursor.Column = 0
+	}
+}
+
+func (c *Content) MoveCursorRight(columns int) {
+	c.Cursor.Column += columns
+}
+
+func (c *Content) MoveCursorToBol() {
+	c.Cursor.Column = 0
+}
+
+func (c *Content) MoveCursorToEol() {
+	if c.Cursor.Line < len(c.Runes) {
+		c.Cursor.Column = len(c.Runes[c.Cursor.Line])
+	} else {
+		c.Cursor.Column = 0
+	}
+
+}
+
+func (c *Content) InsertRune(ch rune) {
+	c.InsertRunes([]rune{ch})
+}
+
+func (c *Content) InsertRunes(runes []rune) {
+	for len(c.Runes) <= c.Cursor.Line {
+		c.Runes = append(c.Runes, nil)
+	}
+	line := c.Runes[c.Cursor.Line]
+	for len(line) <= c.Cursor.Column {
 		line = append(line, ' ')
 	}
-	rightPart := append(runes, line[runeOffset:]...)
-	line = append(line[:runeOffset], rightPart...)
-	c.runes[lineOffset] = line
+	rightPart := append(runes, line[c.Cursor.Column:]...)
+	line = append(line[:c.Cursor.Column], rightPart...)
+	c.Runes[c.Cursor.Line] = line
+	c.Cursor.Column += len(runes)
 }
 
-func (c *content) RemoveRunes(lineOffset, runeOffset, numRunes int) {
-	if len(c.runes) <= lineOffset {
+func (c *Content) DeleteLeft() {
+	c.Cursor.Column--
+
+	if c.Cursor.Column == -1 && c.Cursor.Line > 0 {
+		line := c.Runes[c.Cursor.Line-1]
+		column := len(line)
+		line = append(line, c.Runes[c.Cursor.Line]...)
+		runes := append(c.Runes[:c.Cursor.Line-1], line)
+		runes = append(runes, c.Runes[c.Cursor.Line+1:]...)
+		c.Runes = runes
+		c.SetCursor(c.Cursor.Line-1, column)
 		return
 	}
-	line := c.runes[lineOffset]
-	if len(line) <= runeOffset {
-		return
-	}
-	if runeOffset >= len(line) {
-		return
-	}
-	line = append(line[:runeOffset], line[runeOffset+numRunes:]...)
-	c.runes[lineOffset] = line
+
+	c.DeleteRight()
 }
 
-func (c *content) SplitLine(lineOffset, runeOffset int) {
-	if len(c.runes) <= lineOffset {
+func (c *Content) DeleteRight() {
+	if c.Cursor.Line >= len(c.Runes) {
 		return
 	}
-	line := c.runes[lineOffset]
-
-	if runeOffset > len(line) {
-		runeOffset = len(line)
+	line := c.Runes[c.Cursor.Line]
+	if c.Cursor.Column >= len(line) {
+		return
 	}
-	line1 := append([]rune{}, line[:runeOffset]...)
-	line2 := append([]rune{}, line[runeOffset:]...)
+	line = append(line[:c.Cursor.Column], line[c.Cursor.Column+1:]...)
+	c.Runes[c.Cursor.Line] = line
+}
+
+func (c *Content) SplitLine() {
+	if len(c.Runes) <= c.Cursor.Line {
+		return
+	}
+	line := c.Runes[c.Cursor.Line]
+
+	if c.Cursor.Column > len(line) {
+		c.Cursor.Column = len(line)
+	}
+	line1 := append([]rune{}, line[:c.Cursor.Column]...)
+	line2 := append([]rune{}, line[c.Cursor.Column:]...)
 	result := make([][]rune, 0, 0)
-	result = append(result, c.runes[:lineOffset]...)
+	result = append(result, c.Runes[:c.Cursor.Line]...)
 	result = append(result, line1)
 	result = append(result, line2)
-	result = append(result, c.runes[lineOffset+1:]...)
-	c.runes = result
-}
-
-func (c *content) JoinLines(lineOffset int) int {
-	if lineOffset == 0 || len(c.runes) <= lineOffset {
-		return 0
-	}
-	line := c.runes[lineOffset-1]
-	result := len(line)
-	line = append(line, c.runes[lineOffset]...)
-	runes := append(c.runes[:lineOffset-1], line)
-	runes = append(runes, c.runes[lineOffset+1:]...)
-	c.runes = runes
-	return result
+	result = append(result, c.Runes[c.Cursor.Line+1:]...)
+	c.Runes = result
+	c.MoveCursorDown(1, 1)
+	c.MoveCursorToBol()
 }

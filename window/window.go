@@ -2,7 +2,6 @@ package window
 
 import (
 	"fmt"
-	"log"
 	"time"
 
 	"github.com/gdamore/tcell"
@@ -19,7 +18,7 @@ type Window interface {
 	Run()
 }
 
-func NewWindow(c content.Content, metainfo meta.Meta, inputs, operations model.Set, theme style.Theme) (Window, error) {
+func NewWindow(c *content.Content, metainfo meta.Meta, inputs, operations model.Set, theme style.Theme) (Window, error) {
 	if theme == style.BlueTheme {
 		mainStyle = tcell.StyleDefault.Foreground(tcell.Color231).Background(tcell.Color17)
 		lineNumberStyle = mainStyle.Foreground(tcell.ColorSilver).Background(tcell.Color235)
@@ -75,7 +74,7 @@ var (
 
 type window struct {
 	theme   style.Theme
-	content content.Content
+	content *content.Content
 
 	parser *parser.Parser
 
@@ -107,7 +106,7 @@ func (w *window) resize() {
 	}
 	w.hSplit = w.height / 2
 	lineNumberViewWidth := 2
-	l := len(w.content.Runes())
+	l := len(w.content.Runes)
 	for l > 0 {
 		lineNumberViewWidth++
 		l /= 10
@@ -144,12 +143,12 @@ func (w *window) clear() {
 	w.setText(w.titleView, "Rule Maker", 0, 0, mainStyle.Bold(true))
 	w.setText(w.titleView, time.Now().Format("2006-01-02"), 0, w.width-11, mainStyle.Bold(true))
 	w.setText(w.menuView, "(Ctrl-Q) Quit  (Ctrl-N) Next Error  (Ctrl-P) Previous error", 0, 1, menuStyle)
-	w.setText(w.statusView, fmt.Sprintf("%s", w.content.Path()), 0, 1, menuStyle)
+	w.setText(w.statusView, fmt.Sprintf("%s", w.content.Path), 0, 1, menuStyle)
 }
 
 func (w *window) draw() {
 	w.clear()
-	w.tokens = tokenizer.TokenizeRunes(w.content.Runes())
+	w.tokens = tokenizer.TokenizeRunes(w.content.Runes)
 	w.parser.Parse(w.tokens)
 	w.showText()
 	w.showLineNumbers()
@@ -173,7 +172,7 @@ func (w *window) showText() {
 		w.showToken(token, d)
 	}
 
-	w.ShowCursor(w.mainView)
+	w.ShowCursor()
 }
 
 func (w *window) showToken(token tokenizer.Token, diagnosticMessage *parser.Diagnostic) {
@@ -194,12 +193,11 @@ func (w *window) setText(v *view.View, text string, line, column int, style tcel
 
 func (w *window) showLineNumbers() {
 	format := fmt.Sprintf(" %%%dd ", w.lineNumberView.Width-2)
-	w.lineNumberView.SetCursor(w.mainView.CursorLine, 0)
 	w.lineNumberView.LineOffset = w.mainView.LineOffset
 
-	for i := 0; i < w.mainView.TotalLines; i++ {
+	for i := 0; i < len(w.content.Runes); i++ {
 		number := fmt.Sprintf(format, i+1)
-		if i == w.mainView.CursorLine {
+		if i == w.content.Cursor.Line {
 			w.setText(w.lineNumberView, number, i, 0, lineNumberStyleCurrent)
 		} else {
 			w.setText(w.lineNumberView, number, i, 0, lineNumberStyle)
@@ -222,7 +220,7 @@ func (w *window) showDiagnostics() {
 }
 
 func (w *window) showCompletions() {
-	complitions := w.parser.Completions(w.mainView.CursorLine, w.mainView.CursorColumn)
+	complitions := w.parser.Completions(w.content.Cursor.Line, w.content.Cursor.Column)
 	for i, complition := range complitions {
 		text := complition.Name
 		if complition.TokenType == tokenizer.CanonicalField {
@@ -247,7 +245,7 @@ func wrapLines(str string, w int) (result []string) {
 }
 
 func (w *window) showStatus() {
-	w.setText(w.statusView, fmt.Sprintf("%s %d:%d", w.content.Path(), w.mainView.CursorLine+1, w.mainView.CursorColumn+1), 0, 1, menuStyle)
+	w.setText(w.statusView, fmt.Sprintf("%s %d:%d", w.content.Path, w.content.Cursor.Line+1, w.content.Cursor.Column+1), 0, 1, menuStyle)
 }
 
 func (w *window) Run() {
@@ -264,105 +262,93 @@ func (w *window) handleEvent() bool {
 		}
 		ev = w.screen.PollEvent()
 	}
-	column, line := w.mainView.CursorColumn, w.mainView.CursorLine
 	switch ev := ev.(type) {
 	case *tcell.EventResize:
 		w.screen.Sync()
 	case *tcell.EventKey:
 		if ev.Key() == tcell.KeyRune {
-			w.content.InsertRune(line, column, ev.Rune())
-			w.mainView.SetCursor(line, column+1)
+			w.content.InsertRune(ev.Rune())
 			if ev.Rune() == '(' {
-				w.content.InsertRune(line, column+1, ')')
+				w.content.InsertRune(')')
 			}
 			if ev.Rune() == '"' {
-				w.content.InsertRune(line, column+1, '"')
+				w.content.InsertRune('"')
 			}
 		} else if ev.Key() == tcell.KeyBackspace || ev.Key() == tcell.KeyBackspace2 {
-			if column > 0 {
-				w.mainView.SetCursor(line, column-1)
-				w.content.RemoveRunes(line, column-1, 1)
-			} else if line > 0 {
-				column = w.content.JoinLines(line)
-				w.mainView.SetCursor(line-1, column)
-			}
+			w.content.DeleteLeft()
 		} else if ev.Key() == tcell.KeyDelete {
-			w.content.RemoveRunes(line, column, 1)
+			w.content.DeleteRight()
 		} else if ev.Key() == tcell.KeyEnter {
-			w.content.SplitLine(line, column)
-			w.mainView.SetCursor(line+1, 0)
+			w.content.SplitLine()
 		} else if ev.Key() == tcell.KeyLeft {
-			w.mainView.MoveCursor(-1, 0)
+			w.content.MoveCursorLeft(1)
 		} else if ev.Key() == tcell.KeyRight {
-			w.mainView.MoveCursor(1, 0)
+			w.content.MoveCursorRight(1)
 		} else if ev.Key() == tcell.KeyUp {
-			w.mainView.MoveCursor(0, -1)
+			w.content.MoveCursorUp(1)
 		} else if ev.Key() == tcell.KeyDown {
-			w.mainView.MoveCursor(0, 1)
+			w.content.MoveCursorDown(1, w.mainView.Height-1)
 		} else if ev.Key() == tcell.KeyHome {
-			w.mainView.SetCursor(line, 0)
+			w.content.MoveCursorToBol()
 		} else if ev.Key() == tcell.KeyEnd {
-			if line < len(w.content.Runes()) {
-				w.mainView.SetCursor(line, len(w.content.Runes()[line]))
-			}
+			w.content.MoveCursorToEol()
 		} else if ev.Key() == tcell.KeyPgUp {
-			w.mainView.PageUp()
+			w.content.MoveCursorUp(w.mainView.Height)
 		} else if ev.Key() == tcell.KeyPgDn {
-			w.mainView.PageDown()
+			w.content.MoveCursorDown(w.mainView.Height, w.mainView.Height-1)
 		} else if ev.Key() == tcell.KeyCtrlP {
 			for i := len(w.parser.Diagnostics()) - 1; i >= 0; i-- {
 				d := w.parser.Diagnostics()[i]
-				if d.Token.Line > line {
+				if d.Token.Line > w.content.Cursor.Line {
 					continue
 				}
-				if d.Token.Line < line || d.Token.Column < column {
-					w.mainView.SetCursor(d.Token.Line, d.Token.Column)
+				if d.Token.Line < w.content.Cursor.Line || d.Token.Column < w.content.Cursor.Column {
+					w.content.SetCursor(d.Token.Line, d.Token.Column)
 					break
 				}
 			}
 		} else if ev.Key() == tcell.KeyCtrlN {
 			for _, d := range w.parser.Diagnostics() {
-				if d.Token.Line < line {
+				if d.Token.Line < w.content.Cursor.Line {
 					continue
 				}
-				if d.Token.Line > line || d.Token.Column > column {
-					w.mainView.SetCursor(d.Token.Line, d.Token.Column)
+				if d.Token.Line > w.content.Cursor.Line || d.Token.Column > w.content.Cursor.Column {
+					w.content.SetCursor(d.Token.Line, d.Token.Column)
 					break
 				}
 			}
 		} else if ev.Key() == tcell.KeyTab {
 			text := w.parser.Completion(0)
-			w.content.InsertRunes(line, column, []rune(text))
-			w.mainView.MoveCursor(len(text), 0)
+			w.content.InsertRunes([]rune(text))
 		} else if ev.Key() == tcell.KeyCtrlQ {
 			w.screen.Fini()
 			return false
 		}
-		w.ShowCursor(w.mainView)
+		w.mainView.MakeCursorVisible(w.content.Cursor.Line, w.content.Cursor.Column)
+		w.ShowCursor()
 		w.completionsView.LineOffset = 0
-		log.Printf("### key: name: %v   key: %v   mod: %v   rune: %v\n", ev.Name(), ev.Key(), ev.Modifiers(), ev.Rune())
 	case *tcell.EventMouse:
 		x, y := ev.Position()
 		button := ev.Buttons()
 		if button == tcell.Button1 {
 			if w.mainView.Contains(y, x) {
-				w.mainView.SetCursor(w.mainView.CursorFromScreenCoordinates(y, x))
+				w.content.SetCursor(w.mainView.CursorFromScreenCoordinates(y, x))
 			} else if w.lineNumberView.Contains(y, x) {
 				line, _ := w.lineNumberView.CursorFromScreenCoordinates(y, x)
-				w.mainView.SetCursor(line, 0)
+				w.content.SetCursor(line, 0)
 			} else if w.diagnosticsView.Contains(y, x) {
 				lineNum, _ := w.diagnosticsView.CursorFromScreenCoordinates(y, x)
 				if lineNum < len(w.diagnosticsViewPointers) {
 					p := w.diagnosticsViewPointers[lineNum]
-					w.mainView.SetCursor(p.line, p.column)
+					w.content.SetCursor(p.line, p.column)
 				}
 			} else if w.completionsView.Contains(y, x) {
 				lineNum, _ := w.completionsView.CursorFromScreenCoordinates(y, x)
 				text := w.parser.Completion(lineNum)
-				w.content.InsertRunes(line, column, []rune(text))
-				w.mainView.MoveCursor(len(text), 0)
+				w.content.InsertRunes([]rune(text))
 			}
-			w.ShowCursor(w.mainView)
+			w.mainView.MakeCursorVisible(w.content.Cursor.Line, w.content.Cursor.Column)
+			w.ShowCursor()
 			w.completionsView.LineOffset = 0
 			return true
 		}
@@ -376,13 +362,13 @@ func (w *window) handleEvent() bool {
 
 		if lines != 0 {
 			if w.mainView.Contains(y, x) || w.lineNumberView.Contains(y, x) {
-				w.mainView.Scroll(lines)
+				w.mainView.Scroll(lines, len(w.content.Runes)-1)
 			} else if w.completionsView.Contains(y, x) {
-				w.completionsView.Scroll(lines)
+				w.completionsView.Scroll(lines, w.parser.TotalCompletions()-1)
 			} else if w.diagnosticsView.Contains(y, x) {
-				w.diagnosticsView.Scroll(lines)
+				w.diagnosticsView.Scroll(lines, len(w.diagnosticsViewPointers)-1)
 			}
-			w.ShowCursor(w.mainView)
+			w.ShowCursor()
 		}
 	}
 	return true
@@ -394,13 +380,15 @@ func (w *window) Clear(v *view.View) {
 			w.screen.SetContent(col+v.Left, row+v.Top, ' ', nil, v.Style)
 		}
 	}
-	v.TotalLines = 0
 }
 
-func (w *window) ShowCursor(v *view.View) {
-	if v.CursorColumn < v.ColumnOffset || v.CursorLine < v.LineOffset || v.CursorColumn >= v.ColumnOffset+v.Width || v.CursorLine >= v.LineOffset+v.Height {
+func (w *window) ShowCursor() {
+	if w.content.Cursor.Column < w.mainView.ColumnOffset ||
+		w.content.Cursor.Line < w.mainView.LineOffset ||
+		w.content.Cursor.Column >= w.mainView.ColumnOffset+w.mainView.Width ||
+		w.content.Cursor.Line >= w.mainView.LineOffset+w.mainView.Height {
 		w.screen.HideCursor()
 		return
 	}
-	w.screen.ShowCursor(v.CursorColumn-v.ColumnOffset+v.Left, v.CursorLine-v.LineOffset+v.Top)
+	w.screen.ShowCursor(w.content.Cursor.Column-w.mainView.ColumnOffset+w.mainView.Left, w.content.Cursor.Line-w.mainView.LineOffset+w.mainView.Top)
 }
