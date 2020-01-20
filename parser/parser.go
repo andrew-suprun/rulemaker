@@ -176,7 +176,7 @@ func (p *Parser) scanRuleBody(rule Rule) {
 		p.report(firstToken, "Missing '='")
 		return
 	}
-	var openParens tokenizer.Tokens
+	var openParentheses tokenizer.Tokens
 	bodyComplete := false
 	for tokenIndex := rule.Body + 1; tokenIndex < rule.End; tokenIndex++ {
 		token := p.tokens[tokenIndex]
@@ -191,7 +191,7 @@ func (p *Parser) scanRuleBody(rule Rule) {
 				p.report(token, "Canonical field '%v' is not defined", token.Text)
 			} else if bodyComplete {
 				p.report(token, "Extraneous token '%v'", token.Text)
-			} else if len(openParens) == 0 {
+			} else if len(openParentheses) == 0 {
 				bodyComplete = true
 			}
 		case tokenizer.Variable:
@@ -199,7 +199,7 @@ func (p *Parser) scanRuleBody(rule Rule) {
 				p.report(token, "Variable '%v' is not defined", token.Text)
 			} else if bodyComplete {
 				p.report(token, "Extraneous token '%v'", token.Text)
-			} else if len(openParens) == 0 {
+			} else if len(openParentheses) == 0 {
 				bodyComplete = true
 			}
 		case tokenizer.Operation:
@@ -213,11 +213,11 @@ func (p *Parser) scanRuleBody(rule Rule) {
 				p.report(token, "Input field '%v' is not defined", token.Text)
 			} else if bodyComplete {
 				p.report(token, "Extraneous token '%v'", token.Text)
-			} else if len(openParens) == 0 {
+			} else if len(openParentheses) == 0 {
 				bodyComplete = true
 			}
-		case tokenizer.OpenParen:
-			openParens = append(openParens, token)
+		case tokenizer.OpenParenthesis:
+			openParentheses = append(openParentheses, token)
 			var nextToken *tokenizer.Token
 			for nextTokenIndex := tokenIndex + 1; nextTokenIndex < rule.End; nextTokenIndex++ {
 				next := p.tokens[nextTokenIndex]
@@ -227,17 +227,17 @@ func (p *Parser) scanRuleBody(rule Rule) {
 				nextToken = &next
 				break
 			}
-			if nextToken == nil || nextToken.Type == tokenizer.OpenParen || nextToken.Type == tokenizer.CloseParen {
+			if nextToken == nil || nextToken.Type == tokenizer.OpenParenthesis || nextToken.Type == tokenizer.CloseParenthesis {
 				p.report(token, "Missing operation")
 			} else if nextToken.Type != tokenizer.Operation {
 				p.report(*nextToken, "Missing operation")
 			}
-		case tokenizer.CloseParen:
-			if len(openParens) == 0 {
+		case tokenizer.CloseParenthesis:
+			if len(openParentheses) == 0 {
 				p.report(token, "Unbalanced ')'")
 			} else {
-				openParens = openParens[:len(openParens)-1]
-				if len(openParens) == 0 {
+				openParentheses = openParentheses[:len(openParentheses)-1]
+				if len(openParentheses) == 0 {
 					bodyComplete = true
 				}
 			}
@@ -247,14 +247,14 @@ func (p *Parser) scanRuleBody(rule Rule) {
 			if token.Type != tokenizer.Comment {
 				if bodyComplete {
 					p.report(token, "Extraneous token '%v'", token.Text)
-				} else if len(openParens) == 0 {
+				} else if len(openParentheses) == 0 {
 					bodyComplete = true
 				}
 			}
 		}
 	}
-	for _, openParen := range openParens {
-		p.report(openParen, "Unbalanced '('")
+	for _, openParenthesis := range openParentheses {
+		p.report(openParenthesis, "Unbalanced '('")
 	}
 }
 
@@ -332,7 +332,7 @@ func (p *Parser) completionsForRule(rule Rule, line, column int) (result []Compl
 	if p.tokens[rule.Body].After(line, column-1) {
 		result = p.completionsForHead(int(rule.Index), prefix)
 	} else {
-		if token.Type == tokenizer.OpenParen {
+		if token.Type == tokenizer.OpenParenthesis {
 			prefix = ""
 		}
 		result = p.completionsForBody(int(rule.Index), prefix, token.Type)
@@ -382,7 +382,7 @@ func filterByPrefix(completions map[string]tokenizer.TokenType, prefix string) (
 
 func (p *Parser) completionsForBody(ruleIndex int, prefix string, tokenType tokenizer.TokenType) (result []Completion) {
 	completions := map[string]tokenizer.TokenType{}
-	if tokenType == tokenizer.OpenParen || tokenType == tokenizer.Operation {
+	if tokenType == tokenizer.OpenParenthesis || tokenType == tokenizer.Operation {
 		for op := range p.operations {
 			completions[op] = tokenizer.Operation
 		}

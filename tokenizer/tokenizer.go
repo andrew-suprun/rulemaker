@@ -73,8 +73,8 @@ const (
 	TodayLiteral
 	EqualSign
 	Semicolon
-	OpenParen
-	CloseParen
+	OpenParenthesis
+	CloseParenthesis
 	Comment
 	EndMarker
 )
@@ -117,10 +117,10 @@ func (t TokenType) String() string {
 		return "EqualSign"
 	case Semicolon:
 		return "Semicolon"
-	case OpenParen:
-		return "OpenParen"
-	case CloseParen:
-		return "CloseParen"
+	case OpenParenthesis:
+		return "OpenParenthesis"
+	case CloseParenthesis:
+		return "CloseParenthesis"
 	case Comment:
 		return "Comment"
 	case EndMarker:
@@ -153,7 +153,7 @@ func (t *tokenizer) tokenizeLine(line int, runes []rune) {
 		case '"':
 			t.stringLiteral()
 		case '=':
-			if t.lastTokenType != OpenParen {
+			if t.lastTokenType != OpenParenthesis {
 				t.equalSign()
 			} else {
 				t.regularToken()
@@ -161,9 +161,9 @@ func (t *tokenizer) tokenizeLine(line int, runes []rune) {
 		case ';':
 			t.semicolon()
 		case '(':
-			t.openParen()
+			t.openParenthesis()
 		case ')':
-			t.closeParen()
+			t.closeParenthesis()
 		default:
 			t.regularToken()
 		}
@@ -233,7 +233,7 @@ func (t *tokenizer) regularToken() {
 	case "today":
 		t.token(TodayLiteral, startColumn, nil)
 	default:
-		if t.lastTokenType == OpenParen {
+		if t.lastTokenType == OpenParenthesis {
 			t.token(Operation, startColumn, token)
 		} else {
 			t.token(CanonicalField, startColumn, token)
@@ -296,16 +296,16 @@ func (t *tokenizer) semicolon() {
 	t.token(Semicolon, startColumn, nil)
 }
 
-func (t *tokenizer) openParen() {
+func (t *tokenizer) openParenthesis() {
 	startColumn := t.column
 	t.column++
-	t.token(OpenParen, startColumn, nil)
+	t.token(OpenParenthesis, startColumn, nil)
 }
 
-func (t *tokenizer) closeParen() {
+func (t *tokenizer) closeParenthesis() {
 	startColumn := t.column
 	t.column++
-	t.token(CloseParen, startColumn, nil)
+	t.token(CloseParenthesis, startColumn, nil)
 }
 
 func (t *tokenizer) token(tokenType TokenType, startColumn int, value interface{}) {
