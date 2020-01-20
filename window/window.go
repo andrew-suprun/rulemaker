@@ -96,7 +96,7 @@ type window struct {
 }
 
 type point struct {
-	x, y int
+	line, column int
 }
 
 func (w *window) resize() {
@@ -113,13 +113,13 @@ func (w *window) resize() {
 		l /= 10
 	}
 
-	w.titleView.Resize(0, w.width, 0, 1)
-	w.menuView.Resize(0, w.width, 1, 2)
-	w.lineNumberView.Resize(0, lineNumberViewWidth, 2, w.height-1)
-	w.mainView.Resize(lineNumberViewWidth, w.vSplit, 2, w.height-1)
-	w.diagnosticsView.Resize(w.vSplit+1, w.width, w.hSplit+1, w.height-1)
-	w.completionsView.Resize(w.vSplit+1, w.width, 2, w.hSplit)
-	w.statusView.Resize(0, w.width, w.height-1, w.height)
+	w.titleView.Resize(0, 1, 0, w.width)
+	w.menuView.Resize(1, 2, 0, w.width)
+	w.lineNumberView.Resize(2, w.height-1, 0, lineNumberViewWidth)
+	w.mainView.Resize(2, w.height-1, lineNumberViewWidth, w.vSplit)
+	w.diagnosticsView.Resize(w.hSplit+1, w.height-1, w.vSplit+1, w.width)
+	w.completionsView.Resize(2, w.hSplit, w.vSplit+1, w.width)
+	w.statusView.Resize(w.height-1, w.height, 0, w.width)
 }
 
 func (w *window) clear() {
@@ -194,7 +194,7 @@ func (w *window) setText(v *view.View, text string, line, column int, style tcel
 
 func (w *window) showLineNumbers() {
 	format := fmt.Sprintf(" %%%dd ", w.lineNumberView.Width-2)
-	w.lineNumberView.SetCursor(0, w.mainView.CursorLine)
+	w.lineNumberView.SetCursor(w.mainView.CursorLine, 0)
 	w.lineNumberView.LineOffset = w.mainView.LineOffset
 
 	for i := 0; i < w.mainView.TotalLines; i++ {
@@ -215,7 +215,7 @@ func (w *window) showDiagnostics() {
 		lines := wrapLines(message, w.diagnosticsView.Width)
 		for _, line := range lines {
 			w.setText(w.diagnosticsView, line, reportLine, 0, mainStyle)
-			w.diagnosticsViewPointers = append(w.diagnosticsViewPointers, point{d.Token.Column, d.Token.Line})
+			w.diagnosticsViewPointers = append(w.diagnosticsViewPointers, point{d.Token.Line, d.Token.Column})
 			reportLine++
 		}
 	}
@@ -271,7 +271,7 @@ func (w *window) handleEvent() bool {
 	case *tcell.EventKey:
 		if ev.Key() == tcell.KeyRune {
 			w.content.InsertRune(line, column, ev.Rune())
-			w.mainView.SetCursor(column+1, line)
+			w.mainView.SetCursor(line, column+1)
 			if ev.Rune() == '(' {
 				w.content.InsertRune(line, column+1, ')')
 			}
@@ -280,17 +280,17 @@ func (w *window) handleEvent() bool {
 			}
 		} else if ev.Key() == tcell.KeyBackspace || ev.Key() == tcell.KeyBackspace2 {
 			if column > 0 {
-				w.mainView.SetCursor(column-1, line)
+				w.mainView.SetCursor(line, column-1)
 				w.content.RemoveRunes(line, column-1, 1)
 			} else if line > 0 {
 				column = w.content.JoinLines(line)
-				w.mainView.SetCursor(column, line-1)
+				w.mainView.SetCursor(line-1, column)
 			}
 		} else if ev.Key() == tcell.KeyDelete {
 			w.content.RemoveRunes(line, column, 1)
 		} else if ev.Key() == tcell.KeyEnter {
 			w.content.SplitLine(line, column)
-			w.mainView.SetCursor(0, line+1)
+			w.mainView.SetCursor(line+1, 0)
 		} else if ev.Key() == tcell.KeyLeft {
 			w.mainView.MoveCursor(-1, 0)
 		} else if ev.Key() == tcell.KeyRight {
@@ -300,10 +300,10 @@ func (w *window) handleEvent() bool {
 		} else if ev.Key() == tcell.KeyDown {
 			w.mainView.MoveCursor(0, 1)
 		} else if ev.Key() == tcell.KeyHome {
-			w.mainView.SetCursor(0, line)
+			w.mainView.SetCursor(line, 0)
 		} else if ev.Key() == tcell.KeyEnd {
 			if line < len(w.content.Runes()) {
-				w.mainView.SetCursor(len(w.content.Runes()[line]), line)
+				w.mainView.SetCursor(line, len(w.content.Runes()[line]))
 			}
 		} else if ev.Key() == tcell.KeyPgUp {
 			w.mainView.PageUp()
@@ -316,7 +316,7 @@ func (w *window) handleEvent() bool {
 					continue
 				}
 				if d.Token.Line < line || d.Token.Column < column {
-					w.mainView.SetCursor(d.Token.Column, d.Token.Line)
+					w.mainView.SetCursor(d.Token.Line, d.Token.Column)
 					break
 				}
 			}
@@ -326,7 +326,7 @@ func (w *window) handleEvent() bool {
 					continue
 				}
 				if d.Token.Line > line || d.Token.Column > column {
-					w.mainView.SetCursor(d.Token.Column, d.Token.Line)
+					w.mainView.SetCursor(d.Token.Line, d.Token.Column)
 					break
 				}
 			}
@@ -345,19 +345,19 @@ func (w *window) handleEvent() bool {
 		x, y := ev.Position()
 		button := ev.Buttons()
 		if button == tcell.Button1 {
-			if w.mainView.Contains(x, y) {
-				w.mainView.SetCursor(w.mainView.CursorFromScreenCoordinates(x, y))
-			} else if w.lineNumberView.Contains(x, y) {
-				_, line := w.lineNumberView.CursorFromScreenCoordinates(x, y)
-				w.mainView.SetCursor(0, line)
-			} else if w.diagnosticsView.Contains(x, y) {
-				_, lineNum := w.diagnosticsView.CursorFromScreenCoordinates(x, y)
+			if w.mainView.Contains(y, x) {
+				w.mainView.SetCursor(w.mainView.CursorFromScreenCoordinates(y, x))
+			} else if w.lineNumberView.Contains(y, x) {
+				line, _ := w.lineNumberView.CursorFromScreenCoordinates(y, x)
+				w.mainView.SetCursor(line, 0)
+			} else if w.diagnosticsView.Contains(y, x) {
+				lineNum, _ := w.diagnosticsView.CursorFromScreenCoordinates(y, x)
 				if lineNum < len(w.diagnosticsViewPointers) {
 					p := w.diagnosticsViewPointers[lineNum]
-					w.mainView.SetCursor(p.x, p.y)
+					w.mainView.SetCursor(p.line, p.column)
 				}
-			} else if w.completionsView.Contains(x, y) {
-				_, lineNum := w.completionsView.CursorFromScreenCoordinates(x, y)
+			} else if w.completionsView.Contains(y, x) {
+				lineNum, _ := w.completionsView.CursorFromScreenCoordinates(y, x)
 				text := w.parser.Completion(lineNum)
 				w.content.InsertRunes(line, column, []rune(text))
 				w.mainView.MoveCursor(len(text), 0)
@@ -375,11 +375,11 @@ func (w *window) handleEvent() bool {
 		}
 
 		if lines != 0 {
-			if w.mainView.Contains(x, y) || w.lineNumberView.Contains(x, y) {
+			if w.mainView.Contains(y, x) || w.lineNumberView.Contains(y, x) {
 				w.mainView.Scroll(lines)
-			} else if w.completionsView.Contains(x, y) {
+			} else if w.completionsView.Contains(y, x) {
 				w.completionsView.Scroll(lines)
-			} else if w.diagnosticsView.Contains(x, y) {
+			} else if w.diagnosticsView.Contains(y, x) {
 				w.diagnosticsView.Scroll(lines)
 			}
 			w.ShowCursor(w.mainView)

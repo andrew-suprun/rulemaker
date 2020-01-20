@@ -17,11 +17,11 @@ func NewView(style tcell.Style) *View {
 	return &View{Style: style}
 }
 
-func (v *View) Resize(left, right, top, bottom int) {
-	v.Left = left
-	v.Width = right - left
+func (v *View) Resize(top, bottom, left, right int) {
 	v.Top = top
 	v.Height = bottom - top
+	v.Left = left
+	v.Width = right - left
 }
 
 func (v *View) ClipText(txt string, line, column int) (string, int, int) {
@@ -45,7 +45,7 @@ func (v *View) ClipText(txt string, line, column int) (string, int, int) {
 	return txt, line, column
 }
 
-func (v *View) SetCursor(column, line int) {
+func (v *View) SetCursor(line, column int) {
 	v.CursorColumn = column
 	if v.CursorColumn < 0 {
 		v.CursorColumn = 0
@@ -72,15 +72,15 @@ func (v *View) SetCursor(column, line int) {
 }
 
 func (v *View) MoveCursor(column, line int) {
-	v.SetCursor(column+v.CursorColumn, line+v.CursorLine)
+	v.SetCursor(line+v.CursorLine, column+v.CursorColumn)
 }
 
-func (v *View) Contains(physicalX, physicalY int) bool {
-	return physicalX >= v.Left && physicalX < v.Left+v.Width && physicalY >= v.Top && physicalY < v.Top+v.Height
+func (v *View) Contains(physicalLine, physicalColumn int) bool {
+	return physicalColumn >= v.Left && physicalColumn < v.Left+v.Width && physicalLine >= v.Top && physicalLine < v.Top+v.Height
 }
 
-func (v *View) CursorFromScreenCoordinates(physicalX, physicalY int) (cursorX, cursorY int) {
-	return physicalX + v.ColumnOffset - v.Left, physicalY + v.LineOffset - v.Top
+func (v *View) CursorFromScreenCoordinates(physicalLine, physicalColumn int) (cursorLine, cursorColumn int) {
+	return physicalLine + v.LineOffset - v.Top, physicalColumn + v.ColumnOffset - v.Left
 }
 
 func (v *View) Scroll(lines int) {
