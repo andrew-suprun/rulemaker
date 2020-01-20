@@ -323,7 +323,7 @@ func (p *Parser) completionsForRule(rule Rule, line, column int) (result []Compl
 	}
 
 	prefix := ""
-	if column > token.Column && column <= token.Column+len(token.Text) {
+	if line == token.Line && column > token.Column && column <= token.Column+len(token.Text) {
 		prefix = token.Text[:column-token.Column]
 	}
 	if !token.Contains(line, column-1) {
