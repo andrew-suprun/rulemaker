@@ -270,9 +270,11 @@ func (w *window) handleEvent() bool {
 			w.content.InsertRune(ev.Rune())
 			if ev.Rune() == '(' {
 				w.content.InsertRune(')')
+				w.content.MoveCursorLeft(1)
 			}
 			if ev.Rune() == '"' {
 				w.content.InsertRune('"')
+				w.content.MoveCursorLeft(1)
 			}
 		} else if ev.Key() == tcell.KeyBackspace || ev.Key() == tcell.KeyBackspace2 {
 			w.content.DeleteLeft()
