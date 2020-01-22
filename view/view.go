@@ -1,7 +1,10 @@
 package view
 
 import (
+	"log"
+
 	"github.com/gdamore/tcell"
+	"league.com/rulemaker/model"
 )
 
 type View struct {
@@ -22,11 +25,40 @@ func (v *View) Resize(top, bottom, left, right int) {
 	v.Width = right - left
 }
 
-func (v *View) ClipText(txt string, line, column int) (string, int, int) {
+func (v *View) ForCursor(y, x int, op func(line, column int)) {
+	op(y+v.LineOffset-v.Top, x+v.ColumnOffset-v.Left)
+}
+
+func (v *View) ForSelection(selection model.Selection, op func(y, x int)) {
+	if selection.End.Line < v.LineOffset || selection.Start.Line > v.LineOffset+v.Height {
+		return
+	}
+	for line := selection.Start.Line; line <= selection.End.Line; line++ {
+		if line < v.LineOffset || line > v.LineOffset+v.Height {
+			continue
+		}
+
+		startColumn, endColumn := 0, v.Width
+		if line == selection.Start.Line {
+			startColumn = selection.Start.Column
+		}
+		if line == selection.End.Line {
+			endColumn = selection.End.Column
+		}
+		log.Printf("### line=%d  columns=%d:%d\n", line, startColumn, endColumn)
+
+		y := line + v.Top - v.LineOffset
+		for column := startColumn; column < endColumn; column++ {
+			x := column + v.Left - v.ColumnOffset
+			op(y, x)
+		}
+	}
+}
+
+func (v *View) ShowText(txt string, line, column int, op func(y, x int, ch rune)) {
 	if line < v.LineOffset || line >= v.LineOffset+v.Height ||
 		column+len(txt) < v.ColumnOffset || column >= v.ColumnOffset+v.Width {
-
-		return "", -1, -1
+		return
 	}
 	if column+len(txt) > v.ColumnOffset+v.Width {
 		txt = txt[:v.ColumnOffset+v.Width-column]
@@ -35,9 +67,11 @@ func (v *View) ClipText(txt string, line, column int) (string, int, int) {
 		txt = txt[v.ColumnOffset-column:]
 		column = v.ColumnOffset
 	}
-	line += v.Top - v.LineOffset
-	column += v.Left - v.ColumnOffset
-	return txt, line, column
+	y := line + v.Top - v.LineOffset
+	x := column + v.Left - v.ColumnOffset
+	for i, ch := range txt {
+		op(y, x+i, ch)
+	}
 }
 
 func (v *View) MakeCursorVisible(line, column int) {
@@ -55,12 +89,8 @@ func (v *View) MakeCursorVisible(line, column int) {
 	}
 }
 
-func (v *View) Contains(physicalLine, physicalColumn int) bool {
-	return physicalColumn >= v.Left && physicalColumn < v.Left+v.Width && physicalLine >= v.Top && physicalLine < v.Top+v.Height
-}
-
-func (v *View) CursorFromScreenCoordinates(physicalLine, physicalColumn int) (cursorLine, cursorColumn int) {
-	return physicalLine + v.LineOffset - v.Top, physicalColumn + v.ColumnOffset - v.Left
+func (v *View) Contains(y, x int) bool {
+	return x >= v.Left && x < v.Left+v.Width && y >= v.Top && y < v.Top+v.Height
 }
 
 func (v *View) Scroll(lines, maxLineOffset int) {

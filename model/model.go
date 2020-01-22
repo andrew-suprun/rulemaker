@@ -1,11 +1,29 @@
 package model
 
 import (
+	"fmt"
+
 	"league.com/rulemaker/msg"
 	"league.com/rulemaker/util"
 )
 
 type Set map[string]struct{}
+
+type Cursor struct {
+	Line, Column int
+}
+
+func (c Cursor) String() string {
+	return fmt.Sprintf("%d:%d", c.Line, c.Column)
+}
+
+type Selection struct {
+	Start, End Cursor
+}
+
+func (s Selection) String() string {
+	return fmt.Sprintf("%s - %s", s.Start, s.End)
+}
 
 type Connector interface {
 	FetchFiles() (result Files, err error)

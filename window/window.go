@@ -185,10 +185,9 @@ func (w *window) showToken(token tokenizer.Token, diagnosticMessage *parser.Diag
 }
 
 func (w *window) setText(v *view.View, text string, line, column int, style tcell.Style) {
-	text, line, column = v.ClipText(text, line, column)
-	for i, ch := range text {
-		w.screen.SetContent(column+i, line, ch, nil, style)
-	}
+	v.ShowText(text, line, column, func(y, x int, ch rune) {
+		w.screen.SetContent(x, y, ch, nil, style)
+	})
 }
 
 func (w *window) showLineNumbers() {
@@ -334,20 +333,25 @@ func (w *window) handleEvent() bool {
 		button := ev.Buttons()
 		if button == tcell.Button1 {
 			if w.mainView.Contains(y, x) {
-				w.content.SetCursor(w.mainView.CursorFromScreenCoordinates(y, x))
+				w.mainView.ForCursor(y, x, func(line, column int) {
+					w.content.SetCursor(line, column)
+				})
 			} else if w.lineNumberView.Contains(y, x) {
-				line, _ := w.lineNumberView.CursorFromScreenCoordinates(y, x)
-				w.content.SetCursor(line, 0)
+				w.lineNumberView.ForCursor(y, x, func(line, _ int) {
+					w.content.SetCursor(line, 0)
+				})
 			} else if w.diagnosticsView.Contains(y, x) {
-				lineNum, _ := w.diagnosticsView.CursorFromScreenCoordinates(y, x)
-				if lineNum < len(w.diagnosticsViewPointers) {
-					p := w.diagnosticsViewPointers[lineNum]
-					w.content.SetCursor(p.line, p.column)
-				}
+				w.diagnosticsView.ForCursor(y, x, func(line, column int) {
+					if line < len(w.diagnosticsViewPointers) {
+						p := w.diagnosticsViewPointers[line]
+						w.content.SetCursor(p.line, p.column)
+					}
+				})
 			} else if w.completionsView.Contains(y, x) {
-				lineNum, _ := w.completionsView.CursorFromScreenCoordinates(y, x)
-				text := w.parser.Completion(lineNum)
-				w.content.InsertRunes([]rune(text))
+				w.lineNumberView.ForCursor(y, x, func(line, _ int) {
+					text := w.parser.Completion(line)
+					w.content.InsertRunes([]rune(text))
+				})
 			}
 			w.mainView.MakeCursorVisible(w.content.Cursor.Line, w.content.Cursor.Column)
 			w.ShowCursor()
