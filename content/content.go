@@ -4,16 +4,15 @@ import (
 	"io/ioutil"
 	"os"
 	"strings"
+
+	"league.com/rulemaker/model"
 )
 
 type Content struct {
-	Path   string
-	Runes  [][]rune
-	Cursor Cursor
-}
-
-type Cursor struct {
-	Line, Column int
+	Path      string
+	Runes     [][]rune
+	Cursor    model.Cursor
+	Selection model.Selection
 }
 
 func NewContent(path string) (*Content, error) {
@@ -55,6 +54,10 @@ func (c *Content) SetCursor(line, column int) {
 	if c.Cursor.Line < 0 {
 		c.Cursor.Line = 0
 	}
+}
+
+func (c *Content) SetSelection(selection model.Selection) {
+	c.Selection = selection
 }
 
 func (c *Content) MoveCursorUp(lines int) {

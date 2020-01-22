@@ -92,6 +92,10 @@ type window struct {
 
 	tokens                  tokenizer.Tokens
 	diagnosticsViewPointers []point
+
+	buttons        tcell.ButtonMask
+	startSelection bool
+	selection      model.Selection
 }
 
 type point struct {
@@ -171,8 +175,8 @@ func (w *window) showText() {
 		}
 		w.showToken(token, d)
 	}
-
-	w.ShowCursor()
+	w.showSelection()
+	w.showCursor()
 }
 
 func (w *window) showToken(token tokenizer.Token, diagnosticMessage *parser.Diagnostic) {
@@ -187,6 +191,13 @@ func (w *window) showToken(token tokenizer.Token, diagnosticMessage *parser.Diag
 func (w *window) setText(v *view.View, text string, line, column int, style tcell.Style) {
 	v.ShowText(text, line, column, func(y, x int, ch rune) {
 		w.screen.SetContent(x, y, ch, nil, style)
+	})
+}
+
+func (w *window) showSelection() {
+	w.mainView.ForSelection(w.selection, func(y, x int) {
+		ch, _, style, _ := w.screen.GetContent(x, y)
+		w.screen.SetContent(x, y, ch, nil, style.Reverse(true))
 	})
 }
 
@@ -256,7 +267,7 @@ func (w *window) Run() {
 func (w *window) handleEvent() bool {
 	ev := w.screen.PollEvent()
 	for {
-		if ev, mouseEvent := ev.(*tcell.EventMouse); !mouseEvent || ev.Buttons() != 0 {
+		if ev, mouseEvent := ev.(*tcell.EventMouse); !mouseEvent || ev.Buttons() != 0 || w.startSelection {
 			break
 		}
 		ev = w.screen.PollEvent()
@@ -326,7 +337,7 @@ func (w *window) handleEvent() bool {
 			return false
 		}
 		w.mainView.MakeCursorVisible(w.content.Cursor.Line, w.content.Cursor.Column)
-		w.ShowCursor()
+		w.showCursor()
 		w.completionsView.LineOffset = 0
 	case *tcell.EventMouse:
 		x, y := ev.Position()
@@ -336,6 +347,18 @@ func (w *window) handleEvent() bool {
 				w.mainView.ForCursor(y, x, func(line, column int) {
 					w.content.SetCursor(line, column)
 				})
+				if w.startSelection {
+					w.mainView.ForCursor(y, x, func(line, column int) {
+						w.selection.End = model.Cursor{Line: line, Column: column}
+					})
+
+					w.content.SetSelection(w.selection)
+				} else {
+					w.startSelection = true
+					w.mainView.ForCursor(y, x, func(line, column int) {
+						w.selection.Start = model.Cursor{Line: line, Column: column}
+					})
+				}
 			} else if w.lineNumberView.Contains(y, x) {
 				w.lineNumberView.ForCursor(y, x, func(line, _ int) {
 					w.content.SetCursor(line, 0)
@@ -354,9 +377,11 @@ func (w *window) handleEvent() bool {
 				})
 			}
 			w.mainView.MakeCursorVisible(w.content.Cursor.Line, w.content.Cursor.Column)
-			w.ShowCursor()
+			w.showCursor()
 			w.completionsView.LineOffset = 0
 			return true
+		} else {
+			w.startSelection = false
 		}
 
 		lines := 0
@@ -374,7 +399,7 @@ func (w *window) handleEvent() bool {
 			} else if w.diagnosticsView.Contains(y, x) {
 				w.diagnosticsView.Scroll(lines, len(w.diagnosticsViewPointers)-1)
 			}
-			w.ShowCursor()
+			w.showCursor()
 		}
 	}
 	return true
@@ -388,7 +413,7 @@ func (w *window) Clear(v *view.View) {
 	}
 }
 
-func (w *window) ShowCursor() {
+func (w *window) showCursor() {
 	if w.content.Cursor.Column < w.mainView.ColumnOffset ||
 		w.content.Cursor.Line < w.mainView.LineOffset ||
 		w.content.Cursor.Column >= w.mainView.ColumnOffset+w.mainView.Width ||
