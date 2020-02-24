@@ -9,8 +9,24 @@ import (
 
 type Set map[string]struct{}
 
+type Size struct {
+	Height, Width int
+}
+
+func (s Size) String() string {
+	return fmt.Sprintf("size: %d:%d", s.Height, s.Width)
+}
+
 type Cursor struct {
 	Line, Column int
+}
+
+func (c Cursor) Equals(other Cursor) bool {
+	return c.Line == other.Line && c.Column == other.Column
+}
+
+func (c Cursor) Before(other Cursor) bool {
+	return c.Line < other.Line || (c.Line == other.Line && c.Column < other.Column)
 }
 
 func (c Cursor) String() string {

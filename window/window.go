@@ -21,8 +21,8 @@ type Window interface {
 func NewWindow(c *content.Content, metainfo meta.Meta, inputs, operations model.Set, theme style.Theme) (Window, error) {
 	if theme == style.BlueTheme {
 		mainStyle = tcell.StyleDefault.Foreground(tcell.Color231).Background(tcell.Color17)
-		lineNumberStyle = mainStyle.Foreground(tcell.ColorSilver).Background(tcell.Color235)
-		lineNumberStyleCurrent = mainStyle.Foreground(tcell.Color231).Background(tcell.ColorGrey)
+		lineNumberStyle = mainStyle.Foreground(tcell.ColorSilver).Background(tcell.Color18)
+		lineNumberStyleCurrent = mainStyle.Foreground(tcell.Color231).Background(tcell.Color19)
 		menuStyle = tcell.StyleDefault.Foreground(tcell.Color231).Background(tcell.ColorSilver)
 	} else if theme == style.DarkTheme {
 		mainStyle = tcell.StyleDefault.Foreground(tcell.Color231).Background(tcell.Color235)
@@ -144,7 +144,7 @@ func (w *window) clear() {
 		w.screen.SetContent(col, w.hSplit, tcell.RuneHLine, nil, mainStyle)
 	}
 
-	w.setText(w.titleView, "Rule Maker", 0, 0, mainStyle.Bold(true))
+	w.setText(w.titleView, "Rule Maker", 0, 1, mainStyle.Bold(true))
 	w.setText(w.titleView, time.Now().Format("2006-01-02"), 0, w.width-11, mainStyle.Bold(true))
 	w.setText(w.menuView, "(Ctrl-Q) Quit  (Ctrl-N) Next Error  (Ctrl-P) Previous error", 0, 1, menuStyle)
 	w.setText(w.statusView, fmt.Sprintf("%s", w.content.Path), 0, 1, menuStyle)

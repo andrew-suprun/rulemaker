@@ -29,30 +29,34 @@ func TokenizeRunes(content [][]rune) Tokens {
 
 type Tokens []Token
 
+func (t Tokens) Text(token Token) string {
+	return ""
+}
+
 type Token struct {
-	Text   string
-	Line   int
-	Column int
-	Type   TokenType
-	Value  interface{}
+	Line        int32
+	StartColumn int32
+	EndColumn   int32
+	Type        TokenType
+	Value       interface{}
 }
 
 func (t Token) String() string {
-	return fmt.Sprintf("<%s %q %d:%d value=%v>", t.Type, t.Text, t.Line, t.Column, t.Value)
+	return fmt.Sprintf("<%s %d:%d-%d value=%v>", t.Type, t.Line, t.StartColumn, t.EndColumn, t.Value)
 }
 
-func (t Token) After(line, column int) bool {
-	return t.Line > line || (t.Line == line && t.Column > column)
+func (t Token) After(line, column int32) bool {
+	return t.Line > line || (t.Line == line && t.StartColumn > column)
 }
 
-func (t Token) Contains(line, column int) bool {
+func (t Token) Contains(line, column int32) bool {
 	if t.Type == Comment {
-		return line == t.Line && column >= t.Column
+		return line == t.Line && column >= t.StartColumn
 	}
-	return line == t.Line && (column >= t.Column && column < t.Column+len(t.Text))
+	return line == t.Line && (column >= t.StartColumn && column < t.EndColumn)
 }
 
-type TokenType int
+type TokenType int32
 
 const (
 	InvalidToken TokenType = iota
@@ -310,11 +314,11 @@ func (t *tokenizer) closeParenthesis() {
 
 func (t *tokenizer) token(tokenType TokenType, startColumn int, value interface{}) {
 	t.tokens = append(t.tokens, Token{
-		Text:   string(t.runes[startColumn:t.column]),
-		Line:   t.line,
-		Column: startColumn,
-		Type:   tokenType,
-		Value:  value,
+		Line:        int32(t.line),
+		StartColumn: int32(startColumn),
+		EndColumn:   int32(t.column),
+		Type:        tokenType,
+		Value:       value,
 	})
 	if tokenType != Comment {
 		t.lastTokenType = tokenType

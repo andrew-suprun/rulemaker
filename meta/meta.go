@@ -340,7 +340,7 @@ func ConvertToFloat(param interface{}) interface{} {
 		if str == "" {
 			return 0
 		}
-		if strings.HasPrefix(str, "$") {
+		if str[0] == '$' {
 			str = strings.ReplaceAll(strings.ReplaceAll(str, ",", ""), "$", "")
 		}
 		f64, err := strconv.ParseFloat(str, 10)

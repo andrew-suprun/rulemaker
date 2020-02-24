@@ -33,7 +33,7 @@ type Diagnostic struct {
 }
 
 func (d Diagnostic) String() string {
-	return fmt.Sprintf("%d:%d: %s", d.Token.Line, d.Token.Column, d.Message)
+	return fmt.Sprintf("%d:%d: %s", d.Token.Line, d.Token.StartColumn, d.Message)
 }
 
 func NewParser(metainfo meta.Meta, inputs, operations model.Set) *Parser {
@@ -127,6 +127,7 @@ func (p *Parser) scanDefinitions() {
 		definitionIndex := p.rules[i].Field
 		if definitionIndex >= 0 {
 			token := p.tokens[definitionIndex]
+			ruleIndicesX := definitions[p.tokens.Text(token)]
 			ruleIndices := definitions[token.Text]
 			ruleIndices = append(ruleIndices, i)
 			definitions[token.Text] = ruleIndices
@@ -340,7 +341,7 @@ func (p *Parser) completionsForRule(rule Rule, line, column int) (result []Compl
 	p.completions = make([]string, len(result))
 	prefixLen := len(prefix)
 	for i, completion := range result {
-		if strings.HasPrefix(completion.Name, " ") {
+		if completion.Name == ' ') {
 			p.completions[i] = completion.Name[prefixLen+1:]
 		}
 		p.completions[i] = completion.Name[prefixLen:]
@@ -394,7 +395,7 @@ func (p *Parser) completionsForBody(ruleIndex int, prefix string, tokenType toke
 			if rule.Field != -1 {
 				token := p.tokens[rule.Field]
 				text := token.Text
-				if strings.HasPrefix(text, "_") {
+				if text == '_' {
 					completions[text] = tokenizer.Variable
 				} else {
 					completions[text] = tokenizer.CanonicalField
