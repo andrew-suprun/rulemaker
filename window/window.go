@@ -164,26 +164,37 @@ func (w *window) draw() {
 
 type textStream struct {
 	*window
+	wrapperStyle      tcell.Style
+	currentTokenIndex int
 }
 
-func newTextStream(w *window) *textStream {
-	return &textStream{window: w}
+func newTextStream(w *window, wrapperStyle tcell.Style) *textStream {
+	return &textStream{window: w, wrapperStyle: wrapperStyle}
 }
 
-func (s *textStream) Rune(ch rune, line, column int) {
-	s.window.screen.SetContent(column+s.window.mainView.Left, line+s.window.mainView.Top, ch, nil, s.window.mainView.Style)
+func (s *textStream) Rune(ch rune, contentCursor, screenCursor model.Cursor) {
+	token := s.window.tokens[s.currentTokenIndex]
+	for token.Line() < contentCursor.Line || (token.Line() == contentCursor.Line && token.EndColumn() <= contentCursor.Column) {
+		s.currentTokenIndex++
+		if s.currentTokenIndex >= len(s.window.tokens) {
+			break
+		}
+		token = s.window.tokens[s.currentTokenIndex]
+	}
+	runeStyle := style.TokenStyle(token.Type(), s.window.theme)
+	s.window.screen.SetContent(screenCursor.Column+s.window.mainView.Left, screenCursor.Line+s.window.mainView.Top, ch, nil, runeStyle)
 }
 
-func (s *textStream) BreakRune(line, column int) {
-	s.window.screen.SetContent(column+s.window.mainView.Left, line+s.window.mainView.Top, '↓', nil, s.window.mainView.Style)
+func (s *textStream) BreakRune(screenCursor model.Cursor) {
+	s.window.screen.SetContent(screenCursor.Column+s.window.mainView.Left, screenCursor.Line+s.window.mainView.Top, '↓', nil, s.wrapperStyle)
 }
 
-func (s *textStream) ContinueRune(line, column int) {
-	s.window.screen.SetContent(column+s.window.mainView.Left, line+s.window.mainView.Top, '→', nil, s.window.mainView.Style)
+func (s *textStream) ContinueRune(screenCursor model.Cursor) {
+	s.window.screen.SetContent(screenCursor.Column+s.window.mainView.Left, screenCursor.Line+s.window.mainView.Top, '→', nil, s.wrapperStyle)
 }
 
 func (w *window) showText() {
-	stream := newTextStream(w)
+	stream := newTextStream(w, w.mainView.Style.Foreground(tcell.ColorLightSkyBlue).Bold(true))
 	log.Printf("### start=%d end=%d\n", w.mainView.LineOffset, w.mainView.LineOffset+w.mainView.Height)
 	w.content.StreamText(w.mainView.LineOffset, w.mainView.LineOffset+w.mainView.Height, w.mainView.Width, stream)
 

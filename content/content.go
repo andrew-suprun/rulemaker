@@ -182,15 +182,16 @@ func (c *Content) WrappedLines(width int) (result int) {
 }
 
 type RuneStream interface {
-	Rune(ch rune, line, column int)
-	BreakRune(line, column int)
-	ContinueRune(line, column int)
+	Rune(ch rune, contentCursor, screenCursor model.Cursor)
+	BreakRune(screenCursor model.Cursor)
+	ContinueRune(screenCursor model.Cursor)
 }
 
 func (c *Content) StreamText(physicalLineStart, physicalLineEnd, width int, stream RuneStream) {
 	physicalLineNum := 0
 	screenLineNum := 0
-	for _, line := range c.Runes {
+	for lineIndex, line := range c.Runes {
+		columnIndex := 0
 		lines := splitLine(line, width)
 		for i, wrappedLine := range lines {
 			if physicalLineNum < physicalLineStart {
@@ -199,16 +200,17 @@ func (c *Content) StreamText(physicalLineStart, physicalLineEnd, width int, stre
 			}
 			offset := 0
 			if i > 0 {
-				stream.ContinueRune(screenLineNum, 3)
+				stream.ContinueRune(model.Cursor{Line: screenLineNum, Column: 3})
 				offset = 4
 			}
 
 			for j, ch := range wrappedLine {
-				stream.Rune(ch, screenLineNum, offset+j)
+				stream.Rune(ch, model.Cursor{Line: lineIndex, Column: columnIndex}, model.Cursor{Line: screenLineNum, Column: offset + j})
+				columnIndex++
 			}
 
 			if i < len(lines)-1 {
-				stream.BreakRune(screenLineNum, width-1)
+				stream.BreakRune(model.Cursor{Line: screenLineNum, Column: width - 1})
 			}
 			physicalLineNum++
 			screenLineNum++

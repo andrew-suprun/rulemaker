@@ -33,7 +33,7 @@ type Diagnostic struct {
 }
 
 func (d Diagnostic) String() string {
-	return fmt.Sprintf("%d:%d: %s", d.Token.Line, d.Token.StartColumn, d.Message)
+	return fmt.Sprintf("%d:%d: %s", d.Token.Line(), d.Token.StartColumn(), d.Message)
 }
 
 func NewParser(metainfo meta.Meta, inputs, operations model.Set) *Parser {

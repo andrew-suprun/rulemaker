@@ -4,6 +4,8 @@ import (
 	"fmt"
 	"reflect"
 	"testing"
+
+	"league.com/rulemaker/model"
 )
 
 var fixtures = []struct {
@@ -74,16 +76,16 @@ func newTestStream() *testStream {
 	return &testStream{result: result}
 }
 
-func (s *testStream) Rune(ch rune, line, column int) {
-	s.result[line][column] = ch
+func (s *testStream) Rune(ch rune, contentCursor, screenCursor model.Cursor) {
+	s.result[screenCursor.Line][screenCursor.Column] = ch
 }
 
-func (s *testStream) BreakRune(line, column int) {
-	s.result[line][column] = '↓'
+func (s *testStream) BreakRune(screenCursor model.Cursor) {
+	s.result[screenCursor.Line][screenCursor.Column] = '↓'
 }
 
-func (s *testStream) ContinueRune(line, column int) {
-	s.result[line][column] = '→'
+func (s *testStream) ContinueRune(screenCursor model.Cursor) {
+	s.result[screenCursor.Line][screenCursor.Column] = '→'
 }
 
 var expected = [][]rune{

@@ -62,7 +62,7 @@ func (t Token) Value() interface{} {
 }
 
 func (t Token) String() string {
-	return fmt.Sprintf("<%s %d:%d-%d value=%v>", t.Type, t.Line, t.StartColumn, t.EndColumn, t.Value)
+	return fmt.Sprintf("<%s %d:%d-%d value=%v>", t.Type(), t.Line(), t.StartColumn(), t.EndColumn(), t.Value())
 }
 
 func (t Token) After(line, column int) bool {
