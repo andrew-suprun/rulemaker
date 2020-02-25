@@ -97,7 +97,7 @@ func main() {
 	}
 
 	// c, e := content.NewContent("test.rules")
-	c, e := content.NewContent("emp.rules")
+	c, e := content.NewFileContent("emp.rules")
 	if e != nil {
 		fmt.Fprintf(os.Stderr, "%v\n", e)
 		os.Exit(1)

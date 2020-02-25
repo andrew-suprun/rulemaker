@@ -23,7 +23,7 @@ func TokenizeRunes(content [][]rune) Tokens {
 	for line, runes := range content {
 		t.tokenizeLine(line, runes)
 	}
-	t.tokens = append(t.tokens, Token{Type: EndMarker})
+	t.tokens = append(t.tokens, Token{tokenType: EndMarker})
 	return t.tokens
 }
 
@@ -34,29 +34,49 @@ func (t Tokens) Text(token Token) string {
 }
 
 type Token struct {
-	Line        int32
-	StartColumn int32
-	EndColumn   int32
-	Type        TokenType
-	Value       interface{}
+	line        int
+	startColumn int
+	endColumn   int
+	tokenType   TokenType
+	value       interface{}
+}
+
+func (t Token) Line() int {
+	return int(t.line)
+}
+
+func (t Token) StartColumn() int {
+	return int(t.startColumn)
+}
+
+func (t Token) EndColumn() int {
+	return int(t.endColumn)
+}
+
+func (t Token) Type() TokenType {
+	return t.tokenType
+}
+
+func (t Token) Value() interface{} {
+	return t.value
 }
 
 func (t Token) String() string {
 	return fmt.Sprintf("<%s %d:%d-%d value=%v>", t.Type, t.Line, t.StartColumn, t.EndColumn, t.Value)
 }
 
-func (t Token) After(line, column int32) bool {
-	return t.Line > line || (t.Line == line && t.StartColumn > column)
+func (t Token) After(line, column int) bool {
+	return t.Line() > line || (t.Line() == line && t.StartColumn() > column)
 }
 
-func (t Token) Contains(line, column int32) bool {
-	if t.Type == Comment {
-		return line == t.Line && column >= t.StartColumn
+func (t Token) Contains(line, column int) bool {
+	if t.Type() == Comment {
+		return line == t.Line() && column >= t.StartColumn()
 	}
-	return line == t.Line && (column >= t.StartColumn && column < t.EndColumn)
+	return line == t.Line() && (column >= t.StartColumn() && column < t.EndColumn())
 }
 
-type TokenType int32
+type TokenType int
 
 const (
 	InvalidToken TokenType = iota
@@ -314,11 +334,11 @@ func (t *tokenizer) closeParenthesis() {
 
 func (t *tokenizer) token(tokenType TokenType, startColumn int, value interface{}) {
 	t.tokens = append(t.tokens, Token{
-		Line:        int32(t.line),
-		StartColumn: int32(startColumn),
-		EndColumn:   int32(t.column),
-		Type:        tokenType,
-		Value:       value,
+		line:        t.line,
+		startColumn: startColumn,
+		endColumn:   t.column,
+		tokenType:   tokenType,
+		value:       value,
 	})
 	if tokenType != Comment {
 		t.lastTokenType = tokenType

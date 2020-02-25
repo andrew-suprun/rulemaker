@@ -15,7 +15,11 @@ type Content struct {
 	Selection model.Selection
 }
 
-func NewContent(path string) (*Content, error) {
+func NewContent(runes [][]rune) *Content {
+	return &Content{Runes: runes}
+}
+
+func NewFileContent(path string) (*Content, error) {
 	file, err := os.Open(path)
 	if err != nil {
 		return nil, err
@@ -43,6 +47,10 @@ func NewContent(path string) (*Content, error) {
 
 func (c *Content) Save() error {
 	return nil // TODO
+}
+
+func (c *Content) Columns(line int) int {
+	return len(c.Runes[line])
 }
 
 func (c *Content) SetCursor(line, column int) {
@@ -113,7 +121,7 @@ func (c *Content) InsertRunes(runes []rune) {
 	rightPart := append(runes, line[c.Cursor.Column:]...)
 	line = append(line[:c.Cursor.Column], rightPart...)
 	c.Runes[c.Cursor.Line] = line
-	c.Cursor.Column += len(runes)
+	c.Cursor.Column += int(len(runes))
 }
 
 func (c *Content) DeleteLeft() {
@@ -164,4 +172,66 @@ func (c *Content) SplitLine() {
 	c.Runes = result
 	c.MoveCursorDown(1, 1)
 	c.MoveCursorToBol()
+}
+
+func (c *Content) WrappedLines(width int) (result int) {
+	for _, line := range c.Runes {
+		result += len(splitLine(line, width))
+	}
+	return result
+}
+
+type RuneStream interface {
+	Rune(ch rune, line, column int)
+	BreakRune(line, column int)
+	ContinueRune(line, column int)
+}
+
+func (c *Content) StreamText(physicalLineStart, physicalLineEnd, width int, stream RuneStream) {
+	physicalLineNum := 0
+	screenLineNum := 0
+	for _, line := range c.Runes {
+		lines := splitLine(line, width)
+		for i, wrappedLine := range lines {
+			if physicalLineNum < physicalLineStart {
+				physicalLineNum++
+				continue
+			}
+			offset := 0
+			if i > 0 {
+				stream.ContinueRune(screenLineNum, 3)
+				offset = 4
+			}
+
+			for j, ch := range wrappedLine {
+				stream.Rune(ch, screenLineNum, offset+j)
+			}
+
+			if i < len(lines)-1 {
+				stream.BreakRune(screenLineNum, width-1)
+			}
+			physicalLineNum++
+			screenLineNum++
+			if physicalLineNum >= physicalLineEnd {
+				return
+			}
+		}
+	}
+}
+
+func splitLine(line []rune, width int) [][]rune {
+	if len(line) < width-1 {
+		return [][]rune{line}
+	}
+	result := [][]rune{line[:width-1]}
+	line = line[width-1:]
+	for len(line) > 0 {
+		if len(line) < width-5 {
+			result = append(result, line)
+			break
+		}
+		result = append(result, line[:width-5])
+		line = line[width-5:]
+	}
+	return result
 }

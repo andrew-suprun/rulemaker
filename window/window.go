@@ -2,6 +2,7 @@ package window
 
 import (
 	"fmt"
+	"log"
 	"time"
 
 	"github.com/gdamore/tcell"
@@ -144,10 +145,9 @@ func (w *window) clear() {
 		w.screen.SetContent(col, w.hSplit, tcell.RuneHLine, nil, mainStyle)
 	}
 
-	w.setText(w.titleView, "Rule Maker", 0, 1, mainStyle.Bold(true))
-	w.setText(w.titleView, time.Now().Format("2006-01-02"), 0, w.width-11, mainStyle.Bold(true))
-	w.setText(w.menuView, "(Ctrl-Q) Quit  (Ctrl-N) Next Error  (Ctrl-P) Previous error", 0, 1, menuStyle)
-	w.setText(w.statusView, fmt.Sprintf("%s", w.content.Path), 0, 1, menuStyle)
+	w.setText("Rule Maker", 0, 1, mainStyle.Bold(true))
+	w.setText(time.Now().Format("2006-01-02"), 0, w.width-11, mainStyle.Bold(true))
+	w.setText("(Ctrl-Q) Quit  (Ctrl-N) Next Error  (Ctrl-P) Previous error", 1, 1, menuStyle)
 }
 
 func (w *window) draw() {
@@ -155,51 +155,87 @@ func (w *window) draw() {
 	w.tokens = tokenizer.TokenizeRunes(w.content.Runes)
 	w.parser.Parse(w.tokens)
 	w.showText()
-	w.showLineNumbers()
-	w.showDiagnostics()
-	w.showCompletions()
+	// w.showLineNumbers()
+	// w.showDiagnostics()
+	// w.showCompletions()
 	w.showStatus()
 	w.screen.Show()
 }
 
+type textStream struct {
+	*window
+}
+
+func newTextStream(w *window) *textStream {
+	return &textStream{window: w}
+}
+
+func (s *textStream) Rune(ch rune, line, column int) {
+	s.window.screen.SetContent(column+s.window.mainView.Left, line+s.window.mainView.Top, ch, nil, s.window.mainView.Style)
+}
+
+func (s *textStream) BreakRune(line, column int) {
+	s.window.screen.SetContent(column+s.window.mainView.Left, line+s.window.mainView.Top, '↓', nil, s.window.mainView.Style)
+}
+
+func (s *textStream) ContinueRune(line, column int) {
+	s.window.screen.SetContent(column+s.window.mainView.Left, line+s.window.mainView.Top, '→', nil, s.window.mainView.Style)
+}
+
 func (w *window) showText() {
-	diagnosticsIndex := 0
-	diagnostics := w.parser.Diagnostics()
-	for _, token := range w.tokens {
-		var d *parser.Diagnostic
-		if diagnosticsIndex < len(diagnostics) &&
-			diagnostics[diagnosticsIndex].Token.Line == token.Line &&
-			diagnostics[diagnosticsIndex].Token.Column == token.Column {
-			d = &diagnostics[diagnosticsIndex]
-			diagnosticsIndex++
-		}
-		w.showToken(token, d)
+	stream := newTextStream(w)
+	log.Printf("### start=%d end=%d\n", w.mainView.LineOffset, w.mainView.LineOffset+w.mainView.Height)
+	w.content.StreamText(w.mainView.LineOffset, w.mainView.LineOffset+w.mainView.Height, w.mainView.Width, stream)
+
+	// diagnosticsIndex := 0
+	// diagnostics := w.parser.Diagnostics()
+	// for _, token := range w.tokens {
+	// 	// var d *parser.Diagnostic
+	// 	if diagnosticsIndex < len(diagnostics) &&
+	// 		diagnostics[diagnosticsIndex].Token.Line() == token.Line() &&
+	// 		diagnostics[diagnosticsIndex].Token.StartColumn() == token.StartColumn() {
+	// 		d = &diagnostics[diagnosticsIndex]
+	// 		diagnosticsIndex++
+	// 	}
+	// 	w.showToken(token, d)
+	// }
+	// w.showSelection()
+	// w.showCursor()
+
+	// w.screen.SetContent(x, y, ch, nil, style)
+
+}
+
+func (w *window) setText(text string, line, column int, style tcell.Style) {
+	for i, ch := range text {
+		w.screen.SetContent(column+i, line, ch, nil, style)
 	}
-	w.showSelection()
-	w.showCursor()
 }
 
-func (w *window) showToken(token tokenizer.Token, diagnosticMessage *parser.Diagnostic) {
-	tt := token.Type
-	if diagnosticMessage != nil {
-		tt = tokenizer.InvalidToken
-	}
+// func (w *window) showSelection() {
+// 	w.mainView.ForSelection(w.selection, func(y, x int) {
+// 		ch, _, style, _ := w.screen.GetContent(x, y)
+// 		w.screen.SetContent(x, y, ch, nil, style.Reverse(true))
+// 	})
+// }
 
-	w.setText(w.mainView, token.Text, token.Line, token.Column, style.TokenStyle(tt, w.theme))
-}
-
-func (w *window) setText(v *view.View, text string, line, column int, style tcell.Style) {
-	v.ShowText(text, line, column, func(y, x int, ch rune) {
-		w.screen.SetContent(x, y, ch, nil, style)
-	})
-}
-
-func (w *window) showSelection() {
-	w.mainView.ForSelection(w.selection, func(y, x int) {
-		ch, _, style, _ := w.screen.GetContent(x, y)
-		w.screen.SetContent(x, y, ch, nil, style.Reverse(true))
-	})
-}
+// func (w *window) selectText(v *view.View, selection content.Selection) {
+// if selection.Start.Line == selection.End.Line && selection.Start.StartColumn == selection.End.StartColumn {
+// 	return
+// }
+// y := selection.Start.Line - v.LineOffset
+// if y < 0 || y > v.Height {
+// 	return
+// }
+// for col := selection.Start.StartColumn; col < selection.End.StartColumn; col++ {
+// 	x := col - v.StartColumnOffset
+// 	if x < 0 && x > v.Width {
+// 		continue
+// 	}
+// 	ch, _, style, _ := w.screen.GetContent(x+v.Left, y+v.Top)
+// 	w.screen.SetContent(x+v.Left, y+v.Top, ch, nil, style.Reverse(true))
+// }
+// }
 
 func (w *window) showLineNumbers() {
 	format := fmt.Sprintf(" %%%dd ", w.lineNumberView.Width-2)
@@ -208,9 +244,9 @@ func (w *window) showLineNumbers() {
 	for i := 0; i < len(w.content.Runes); i++ {
 		number := fmt.Sprintf(format, i+1)
 		if i == w.content.Cursor.Line {
-			w.setText(w.lineNumberView, number, i, 0, lineNumberStyleCurrent)
+			w.setText(number, i, 0, lineNumberStyleCurrent)
 		} else {
-			w.setText(w.lineNumberView, number, i, 0, lineNumberStyle)
+			w.setText(number, i, 0, lineNumberStyle)
 		}
 	}
 }
@@ -219,11 +255,11 @@ func (w *window) showDiagnostics() {
 	reportLine := 0
 	w.diagnosticsViewPointers = []point{}
 	for _, d := range w.parser.Diagnostics() {
-		message := fmt.Sprintf("%d:%d %s", d.Token.Line+1, d.Token.Column+1, d.Message)
+		message := fmt.Sprintf("%d:%d %s", d.Token.Line()+1, d.Token.StartColumn()+1, d.Message)
 		lines := wrapLines(message, w.diagnosticsView.Width)
 		for _, line := range lines {
-			w.setText(w.diagnosticsView, line, reportLine, 0, mainStyle)
-			w.diagnosticsViewPointers = append(w.diagnosticsViewPointers, point{d.Token.Line, d.Token.Column})
+			w.setText(line, reportLine, 0, mainStyle)
+			w.diagnosticsViewPointers = append(w.diagnosticsViewPointers, point{d.Token.Line(), d.Token.StartColumn()})
 			reportLine++
 		}
 	}
@@ -236,7 +272,7 @@ func (w *window) showCompletions() {
 		if complition.TokenType == tokenizer.CanonicalField {
 			text = " " + complition.Name
 		}
-		w.setText(w.completionsView, text, i, 0, style.TokenStyle(complition.TokenType, w.theme))
+		w.setText(text, i, 0, style.TokenStyle(complition.TokenType, w.theme))
 	}
 }
 
@@ -255,7 +291,7 @@ func wrapLines(str string, w int) (result []string) {
 }
 
 func (w *window) showStatus() {
-	w.setText(w.statusView, fmt.Sprintf("%s %d:%d", w.content.Path, w.content.Cursor.Line+1, w.content.Cursor.Column+1), 0, 1, menuStyle)
+	w.setText(fmt.Sprintf("%s %d:%d", w.content.Path, w.content.Cursor.Line+1, w.content.Cursor.Column+1), w.height-1, 1, menuStyle)
 }
 
 func (w *window) Run() {
@@ -311,21 +347,21 @@ func (w *window) handleEvent() bool {
 		} else if ev.Key() == tcell.KeyCtrlP {
 			for i := len(w.parser.Diagnostics()) - 1; i >= 0; i-- {
 				d := w.parser.Diagnostics()[i]
-				if d.Token.Line > w.content.Cursor.Line {
+				if d.Token.Line() > w.content.Cursor.Line {
 					continue
 				}
-				if d.Token.Line < w.content.Cursor.Line || d.Token.Column < w.content.Cursor.Column {
-					w.content.SetCursor(d.Token.Line, d.Token.Column)
+				if d.Token.Line() < w.content.Cursor.Line || d.Token.StartColumn() < w.content.Cursor.Column {
+					w.content.SetCursor(d.Token.Line(), d.Token.StartColumn())
 					break
 				}
 			}
 		} else if ev.Key() == tcell.KeyCtrlN {
 			for _, d := range w.parser.Diagnostics() {
-				if d.Token.Line < w.content.Cursor.Line {
+				if d.Token.Line() < w.content.Cursor.Line {
 					continue
 				}
-				if d.Token.Line > w.content.Cursor.Line || d.Token.Column > w.content.Cursor.Column {
-					w.content.SetCursor(d.Token.Line, d.Token.Column)
+				if d.Token.Line() > w.content.Cursor.Line || d.Token.StartColumn() > w.content.Cursor.Column {
+					w.content.SetCursor(d.Token.Line(), d.Token.StartColumn())
 					break
 				}
 			}
@@ -393,7 +429,7 @@ func (w *window) handleEvent() bool {
 
 		if lines != 0 {
 			if w.mainView.Contains(y, x) || w.lineNumberView.Contains(y, x) {
-				w.mainView.Scroll(lines, len(w.content.Runes)-1)
+				w.mainView.Scroll(lines, w.content.WrappedLines(w.mainView.Width)-1)
 			} else if w.completionsView.Contains(y, x) {
 				w.completionsView.Scroll(lines, w.parser.TotalCompletions()-1)
 			} else if w.diagnosticsView.Contains(y, x) {

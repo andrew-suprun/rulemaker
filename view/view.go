@@ -55,25 +55,6 @@ func (v *View) ForSelection(selection model.Selection, op func(y, x int)) {
 	}
 }
 
-func (v *View) ShowText(txt string, line, column int, op func(y, x int, ch rune)) {
-	if line < v.LineOffset || line >= v.LineOffset+v.Height ||
-		column+len(txt) < v.ColumnOffset || column >= v.ColumnOffset+v.Width {
-		return
-	}
-	if column+len(txt) > v.ColumnOffset+v.Width {
-		txt = txt[:v.ColumnOffset+v.Width-column]
-	}
-	if column < v.ColumnOffset {
-		txt = txt[v.ColumnOffset-column:]
-		column = v.ColumnOffset
-	}
-	y := line + v.Top - v.LineOffset
-	x := column + v.Left - v.ColumnOffset
-	for i, ch := range txt {
-		op(y, x+i, ch)
-	}
-}
-
 func (v *View) MakeCursorVisible(line, column int) {
 	if v.LineOffset > line {
 		v.LineOffset = line
