@@ -8,10 +8,10 @@ import (
 )
 
 type View struct {
-	Left, Width              int
-	Top, Height              int
-	ColumnOffset, LineOffset int
-	Style                    tcell.Style
+	Left, Width int
+	Top, Height int
+	LineOffset  int
+	Style       tcell.Style
 }
 
 func NewView(style tcell.Style) *View {
@@ -26,7 +26,7 @@ func (v *View) Resize(top, bottom, left, right int) {
 }
 
 func (v *View) ForCursor(y, x int, op func(line, column int)) {
-	op(y+v.LineOffset-v.Top, x+v.ColumnOffset-v.Left)
+	op(y+v.LineOffset-v.Top, x-v.Left)
 }
 
 func (v *View) ForSelection(selection model.Selection, op func(y, x int)) {
@@ -49,7 +49,7 @@ func (v *View) ForSelection(selection model.Selection, op func(y, x int)) {
 
 		y := line + v.Top - v.LineOffset
 		for column := startColumn; column < endColumn; column++ {
-			x := column + v.Left - v.ColumnOffset
+			x := column + v.Left
 			op(y, x)
 		}
 	}
@@ -61,12 +61,6 @@ func (v *View) MakeCursorVisible(line, column int) {
 	}
 	if v.LineOffset <= line-v.Height {
 		v.LineOffset = line - v.Height + 1
-	}
-	if v.ColumnOffset > column {
-		v.ColumnOffset = column
-	}
-	if v.ColumnOffset <= column-v.Width {
-		v.ColumnOffset = column - v.Width + 1
 	}
 }
 
@@ -82,4 +76,86 @@ func (v *View) Scroll(lines, maxLineOffset int) {
 	if v.LineOffset < 0 {
 		v.LineOffset = 0
 	}
+}
+
+func (v *View) WrappedLines(runes [][]rune) (result int) {
+	for _, line := range runes {
+		result += len(splitLine(line, v.Width))
+	}
+	return result
+}
+
+type LineNumberStream interface {
+	Line(contentLine, screenLine int)
+}
+
+func (v *View) StreamLines(runes [][]rune, width int, stream LineNumberStream) {
+	physicalLineNum := 0
+	for lineIndex, line := range runes {
+		lines := splitLine(line, width)
+		if physicalLineNum < v.LineOffset {
+			physicalLineNum += len(lines)
+			continue
+		}
+		if physicalLineNum-v.LineOffset+v.Top > v.Height+1 {
+			return
+		}
+		stream.Line(lineIndex, physicalLineNum-v.LineOffset+v.Top)
+		physicalLineNum += len(lines)
+	}
+}
+
+type RuneStream interface {
+	Rune(ch rune, contentCursor, screenCursor model.Cursor)
+	BreakRune(screenCursor model.Cursor)
+	ContinueRune(screenCursor model.Cursor)
+}
+
+func (v *View) StreamText(runes [][]rune, stream RuneStream) {
+	physicalLineNum := 0
+	for lineIndex, line := range runes {
+		columnIndex := 0
+		lines := splitLine(line, v.Width)
+		for i, wrappedLine := range lines {
+			if physicalLineNum < v.LineOffset {
+				physicalLineNum++
+				continue
+			}
+			offset := 0
+			if i > 0 {
+				stream.ContinueRune(model.Cursor{Line: physicalLineNum - v.LineOffset + v.Top, Column: 3 + v.Left})
+				offset = 4
+			}
+
+			for j, ch := range wrappedLine {
+				stream.Rune(ch, model.Cursor{Line: lineIndex, Column: columnIndex}, model.Cursor{Line: physicalLineNum - v.LineOffset + v.Top, Column: offset + j + v.Left})
+				columnIndex++
+			}
+
+			if i < len(lines)-1 {
+				stream.BreakRune(model.Cursor{Line: physicalLineNum - v.LineOffset + v.Top, Column: v.Width - 1 + v.Left})
+			}
+			physicalLineNum++
+			if physicalLineNum >= v.LineOffset+v.Height {
+				return
+			}
+		}
+	}
+}
+
+func splitLine(line []rune, width int) [][]rune {
+	if len(line) < width-1 {
+		return [][]rune{line}
+	}
+	result := [][]rune{line[:width-1]}
+	line = line[width-1:]
+	for len(line) > 0 {
+		if len(line) < width-5 {
+			result = append(result, line)
+			break
+		}
+		result = append(result, line[:width-5])
+		line = line[width-5:]
+	}
+	return result
 }

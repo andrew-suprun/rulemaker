@@ -2,7 +2,6 @@ package window
 
 import (
 	"fmt"
-	"log"
 	"time"
 
 	"github.com/gdamore/tcell"
@@ -155,24 +154,30 @@ func (w *window) draw() {
 	w.tokens = tokenizer.TokenizeRunes(w.content.Runes)
 	w.parser.Parse(w.tokens)
 	w.showText()
-	// w.showLineNumbers()
+	w.showLineNumbers()
 	// w.showDiagnostics()
 	// w.showCompletions()
 	w.showStatus()
 	w.screen.Show()
 }
 
-type textStream struct {
+func (w *window) setText(text string, line, column int, style tcell.Style) {
+	for i, ch := range text {
+		w.screen.SetContent(column+i, line, ch, nil, style)
+	}
+}
+
+type mainViewStream struct {
 	*window
 	wrapperStyle      tcell.Style
 	currentTokenIndex int
 }
 
-func newTextStream(w *window, wrapperStyle tcell.Style) *textStream {
-	return &textStream{window: w, wrapperStyle: wrapperStyle}
+func newMainViewStream(w *window, wrapperStyle tcell.Style) *mainViewStream {
+	return &mainViewStream{window: w, wrapperStyle: wrapperStyle}
 }
 
-func (s *textStream) Rune(ch rune, contentCursor, screenCursor model.Cursor) {
+func (s *mainViewStream) Rune(ch rune, contentCursor, screenCursor model.Cursor) {
 	token := s.window.tokens[s.currentTokenIndex]
 	for token.Line() < contentCursor.Line || (token.Line() == contentCursor.Line && token.EndColumn() <= contentCursor.Column) {
 		s.currentTokenIndex++
@@ -182,21 +187,20 @@ func (s *textStream) Rune(ch rune, contentCursor, screenCursor model.Cursor) {
 		token = s.window.tokens[s.currentTokenIndex]
 	}
 	runeStyle := style.TokenStyle(token.Type(), s.window.theme)
-	s.window.screen.SetContent(screenCursor.Column+s.window.mainView.Left, screenCursor.Line+s.window.mainView.Top, ch, nil, runeStyle)
+	s.window.screen.SetContent(screenCursor.Column, screenCursor.Line, ch, nil, runeStyle)
 }
 
-func (s *textStream) BreakRune(screenCursor model.Cursor) {
-	s.window.screen.SetContent(screenCursor.Column+s.window.mainView.Left, screenCursor.Line+s.window.mainView.Top, '↓', nil, s.wrapperStyle)
+func (s *mainViewStream) BreakRune(screenCursor model.Cursor) { // TODO: rune style by theme
+	s.window.screen.SetContent(screenCursor.Column, screenCursor.Line, '↓', nil, s.wrapperStyle)
 }
 
-func (s *textStream) ContinueRune(screenCursor model.Cursor) {
-	s.window.screen.SetContent(screenCursor.Column+s.window.mainView.Left, screenCursor.Line+s.window.mainView.Top, '→', nil, s.wrapperStyle)
+func (s *mainViewStream) ContinueRune(screenCursor model.Cursor) {
+	s.window.screen.SetContent(screenCursor.Column, screenCursor.Line, '→', nil, s.wrapperStyle)
 }
 
 func (w *window) showText() {
-	stream := newTextStream(w, w.mainView.Style.Foreground(tcell.ColorLightSkyBlue).Bold(true))
-	log.Printf("### start=%d end=%d\n", w.mainView.LineOffset, w.mainView.LineOffset+w.mainView.Height)
-	w.content.StreamText(w.mainView.LineOffset, w.mainView.LineOffset+w.mainView.Height, w.mainView.Width, stream)
+	stream := newMainViewStream(w, w.mainView.Style.Foreground(tcell.ColorLightSkyBlue).Bold(true))
+	w.mainView.StreamText(w.content.Runes, stream)
 
 	// diagnosticsIndex := 0
 	// diagnostics := w.parser.Diagnostics()
@@ -217,49 +221,29 @@ func (w *window) showText() {
 
 }
 
-func (w *window) setText(text string, line, column int, style tcell.Style) {
-	for i, ch := range text {
-		w.screen.SetContent(column+i, line, ch, nil, style)
+type lineNumbersStream struct {
+	*window
+	format string
+}
+
+func newLineNumbersStream(w *window, format string) *lineNumbersStream {
+	return &lineNumbersStream{window: w, format: format}
+}
+
+func (s *lineNumbersStream) Line(contentLine, screenLine int) {
+	number := fmt.Sprintf(s.format, contentLine+1)
+	if contentLine == s.window.content.Cursor.Line {
+		s.window.setText(number, screenLine, 0, lineNumberStyleCurrent)
+	} else {
+		s.window.setText(number, screenLine, 0, lineNumberStyle)
 	}
 }
 
-// func (w *window) showSelection() {
-// 	w.mainView.ForSelection(w.selection, func(y, x int) {
-// 		ch, _, style, _ := w.screen.GetContent(x, y)
-// 		w.screen.SetContent(x, y, ch, nil, style.Reverse(true))
-// 	})
-// }
-
-// func (w *window) selectText(v *view.View, selection content.Selection) {
-// if selection.Start.Line == selection.End.Line && selection.Start.StartColumn == selection.End.StartColumn {
-// 	return
-// }
-// y := selection.Start.Line - v.LineOffset
-// if y < 0 || y > v.Height {
-// 	return
-// }
-// for col := selection.Start.StartColumn; col < selection.End.StartColumn; col++ {
-// 	x := col - v.StartColumnOffset
-// 	if x < 0 && x > v.Width {
-// 		continue
-// 	}
-// 	ch, _, style, _ := w.screen.GetContent(x+v.Left, y+v.Top)
-// 	w.screen.SetContent(x+v.Left, y+v.Top, ch, nil, style.Reverse(true))
-// }
-// }
-
 func (w *window) showLineNumbers() {
-	format := fmt.Sprintf(" %%%dd ", w.lineNumberView.Width-2)
 	w.lineNumberView.LineOffset = w.mainView.LineOffset
-
-	for i := 0; i < len(w.content.Runes); i++ {
-		number := fmt.Sprintf(format, i+1)
-		if i == w.content.Cursor.Line {
-			w.setText(number, i, 0, lineNumberStyleCurrent)
-		} else {
-			w.setText(number, i, 0, lineNumberStyle)
-		}
-	}
+	format := fmt.Sprintf(" %%%dd ", w.lineNumberView.Width-2)
+	stream := newLineNumbersStream(w, format)
+	w.lineNumberView.StreamLines(w.content.Runes, w.mainView.Width, stream)
 }
 
 func (w *window) showDiagnostics() {
@@ -427,9 +411,8 @@ func (w *window) handleEvent() bool {
 			w.showCursor()
 			w.completionsView.LineOffset = 0
 			return true
-		} else {
-			w.startSelection = false
 		}
+		w.startSelection = false
 
 		lines := 0
 		if button&tcell.WheelUp != 0 {
@@ -440,7 +423,7 @@ func (w *window) handleEvent() bool {
 
 		if lines != 0 {
 			if w.mainView.Contains(y, x) || w.lineNumberView.Contains(y, x) {
-				w.mainView.Scroll(lines, w.content.WrappedLines(w.mainView.Width)-1)
+				w.mainView.Scroll(lines, w.mainView.WrappedLines(w.content.Runes)-1)
 			} else if w.completionsView.Contains(y, x) {
 				w.completionsView.Scroll(lines, w.parser.TotalCompletions()-1)
 			} else if w.diagnosticsView.Contains(y, x) {
@@ -461,12 +444,10 @@ func (w *window) Clear(v *view.View) {
 }
 
 func (w *window) showCursor() {
-	if w.content.Cursor.Column < w.mainView.ColumnOffset ||
-		w.content.Cursor.Line < w.mainView.LineOffset ||
-		w.content.Cursor.Column >= w.mainView.ColumnOffset+w.mainView.Width ||
+	if w.content.Cursor.Line < w.mainView.LineOffset ||
 		w.content.Cursor.Line >= w.mainView.LineOffset+w.mainView.Height {
 		w.screen.HideCursor()
 		return
 	}
-	w.screen.ShowCursor(w.content.Cursor.Column-w.mainView.ColumnOffset+w.mainView.Left, w.content.Cursor.Line-w.mainView.LineOffset+w.mainView.Top)
+	w.screen.ShowCursor(w.content.Cursor.Column+w.mainView.Left, w.content.Cursor.Line-w.mainView.LineOffset+w.mainView.Top)
 }
