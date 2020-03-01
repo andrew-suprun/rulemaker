@@ -107,8 +107,7 @@ func (v *View) StreamLines(runes [][]rune, width int, stream LineNumberStream) {
 
 type RuneStream interface {
 	Rune(ch rune, contentCursor, screenCursor model.Cursor)
-	BreakRune(screenCursor model.Cursor)
-	ContinueRune(screenCursor model.Cursor)
+	LineBreak(screenCursor model.Cursor)
 }
 
 func (v *View) StreamText(runes [][]rune, stream RuneStream) {
@@ -121,19 +120,14 @@ func (v *View) StreamText(runes [][]rune, stream RuneStream) {
 				physicalLineNum++
 				continue
 			}
-			offset := 0
-			if i > 0 {
-				stream.ContinueRune(model.Cursor{Line: physicalLineNum - v.LineOffset + v.Top, Column: 3 + v.Left})
-				offset = 4
-			}
 
 			for j, ch := range wrappedLine {
-				stream.Rune(ch, model.Cursor{Line: lineIndex, Column: columnIndex}, model.Cursor{Line: physicalLineNum - v.LineOffset + v.Top, Column: offset + j + v.Left})
+				stream.Rune(ch, model.Cursor{Line: lineIndex, Column: columnIndex}, model.Cursor{Line: physicalLineNum - v.LineOffset + v.Top, Column: j + v.Left})
 				columnIndex++
 			}
 
 			if i < len(lines)-1 {
-				stream.BreakRune(model.Cursor{Line: physicalLineNum - v.LineOffset + v.Top, Column: v.Width - 1 + v.Left})
+				stream.LineBreak(model.Cursor{Line: physicalLineNum - v.LineOffset + v.Top, Column: v.Width - 1 + v.Left})
 			}
 			physicalLineNum++
 			if physicalLineNum >= v.LineOffset+v.Height {
@@ -144,18 +138,11 @@ func (v *View) StreamText(runes [][]rune, stream RuneStream) {
 }
 
 func splitLine(line []rune, width int) [][]rune {
-	if len(line) < width-1 {
-		return [][]rune{line}
+	result := make([][]rune, 0, len(line)/(width-1)+1)
+	for len(line) >= width {
+		result = append(result, line[:width-1])
+		line = line[width-1:]
 	}
-	result := [][]rune{line[:width-1]}
-	line = line[width-1:]
-	for len(line) > 0 {
-		if len(line) < width-5 {
-			result = append(result, line)
-			break
-		}
-		result = append(result, line[:width-5])
-		line = line[width-5:]
-	}
+	result = append(result, line)
 	return result
 }

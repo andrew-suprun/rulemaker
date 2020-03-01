@@ -190,7 +190,7 @@ func (s *mainViewStream) Rune(ch rune, contentCursor, screenCursor model.Cursor)
 	s.window.screen.SetContent(screenCursor.Column, screenCursor.Line, ch, nil, runeStyle)
 }
 
-func (s *mainViewStream) BreakRune(screenCursor model.Cursor) { // TODO: rune style by theme
+func (s *mainViewStream) LineBreak(screenCursor model.Cursor) { // TODO: rune style by theme
 	s.window.screen.SetContent(screenCursor.Column, screenCursor.Line, '↓', nil, s.wrapperStyle)
 }
 

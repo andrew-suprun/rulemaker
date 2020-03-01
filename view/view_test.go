@@ -15,8 +15,8 @@ var fixtures = []struct {
 	{"", 1},
 	{"1234567", 1},
 	{"12345678", 2},
-	{"1234567890", 2},
-	{"12345678901", 3},
+	{"12345678901234", 2},
+	{"123456789012345", 3},
 }
 
 func TestWrappedLines(t *testing.T) {
@@ -85,7 +85,7 @@ func (s *testStream) Rune(ch rune, contentCursor, screenCursor model.Cursor) {
 	s.result[screenCursor.Line][screenCursor.Column] = ch
 }
 
-func (s *testStream) BreakRune(screenCursor model.Cursor) {
+func (s *testStream) LineBreak(screenCursor model.Cursor) {
 	s.result[screenCursor.Line][screenCursor.Column] = '↓'
 }
 
@@ -97,12 +97,12 @@ var runesExpected = [][]rune{
 	{' ', ' ', ' ', ' ', ' ', ' ', ' ', ' '},
 	{'1', '2', '3', '4', '5', '6', '7', ' '},
 	{'1', '2', '3', '4', '5', '6', '7', '↓'},
-	{' ', ' ', ' ', '→', '8', ' ', ' ', ' '},
+	{'8', ' ', ' ', ' ', ' ', ' ', ' ', ' '},
 	{'1', '2', '3', '4', '5', '6', '7', '↓'},
-	{' ', ' ', ' ', '→', '8', '9', '0', ' '},
+	{'8', '9', '0', '1', '2', '3', '4', ' '},
 	{'1', '2', '3', '4', '5', '6', '7', '↓'},
-	{' ', ' ', ' ', '→', '8', '9', '0', '↓'},
-	{' ', ' ', ' ', '→', '1', ' ', ' ', ' '},
+	{'8', '9', '0', '1', '2', '3', '4', '↓'},
+	{'5', ' ', ' ', ' ', ' ', ' ', ' ', ' '},
 }
 
 func TestStreamLineNumbers(t *testing.T) {
@@ -115,7 +115,7 @@ func TestStreamLineNumbers(t *testing.T) {
 	}
 
 	stream := &testLineNumbersStream{}
-	v.StreamLines(lines, stream)
+	v.StreamLines(lines, v.Width, stream)
 	if !reflect.DeepEqual(stream.result, linesExpected) {
 		t.FailNow()
 	}
